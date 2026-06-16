@@ -1,20 +1,292 @@
+import React, { useRef, useState, useEffect } from 'react';
+import {
+  NavigationContainer,
+  NavigationState,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Platform, View, Alert, AppState, AppStateStatus } from 'react-native';
 
-export default function App() {
+import TodayScreen from './screens/TodayScreen';
+import TasksScreen from './screens/TasksScreen';
+import TimetableScreen from './screens/TimetableScreen';
+import FocusScreen from './screens/FocusScreen';
+import ProfileScreen from './screens/ProfileScreen';
+
+import { COLORS, FONT_SIZE, FONT_WEIGHT } from './src/utils/theme';
+import { PomodoroActiveBanner } from './src/components/focus/PomodoroActiveBanner';
+import { useFocusStore } from './src/store';
+import { OnboardingStartScreen } from './src/components/onboarding/OnboardingStartScreen';
+
+const Tab = createBottomTabNavigator();
+const navigationRef = createNavigationContainerRef<any>();
+
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TAB_CONFIG: {
+  name: string;
+  label: string;
+  icon: IconName;
+  iconActive: IconName;
+  component: React.ComponentType;
+}[] = [
+  { name: 'Today', label: 'Hôm nay', icon: 'home-outline', iconActive: 'home', component: TodayScreen },
+  { name: 'Tasks', label: 'Việc', icon: 'checkbox-outline', iconActive: 'checkbox', component: TasksScreen },
+  { name: 'Timetable', label: 'Lịch', icon: 'calendar-outline', iconActive: 'calendar', component: TimetableScreen },
+  { name: 'Focus', label: 'Tập trung', icon: 'timer-outline', iconActive: 'timer', component: FocusScreen },
+  { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline', iconActive: 'person', component: ProfileScreen },
+];
+
+// ─── Inner app wrapper (đọc store hooks bên trong SafeAreaProvider) ─────────
+function AppInner() {
+  const insets = useSafeAreaInsets();
+  const { activeSession, logAbandon, setActiveSession, addPoints, hasCompletedOnboarding, completeOnboarding, startTutorial } = useFocusStore();
+  const [currentTab, setCurrentTab] = useState('Today');
+  const prevTabRef = useRef('Today');
+  const hasLoggedSwitchRef = useRef(false);
+  const hasAbandonedInBackgroundRef = useRef(false);
+
+  const handleStartApp = () => {
+    completeOnboarding();
+    if (navigationRef.isReady()) {
+      navigationRef.navigate('Focus');
+      startTutorial('Focus');
+    }
+  };
+
+  // Lưu activeSession vào ref để dùng trong AppState listener không bị closure cũ
+  const activeSessionRef = useRef(activeSession);
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
+  // Lắng nghe trạng thái ứng dụng để phạt điểm và bắn thông báo khi chạy nền (bỏ dở)
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background') {
+        const session = activeSessionRef.current;
+        if (session) {
+          // 1. Ghi log abandon
+          logAbandon({
+            timestamp: new Date().toISOString(),
+            date: new Date().toISOString().split('T')[0],
+            subjectId: session.subjectId,
+            taskId: session.taskId,
+            mode: session.mode,
+            timeLeftSeconds: session.timeLeft,
+            elapsedSeconds: session.totalSeconds - session.timeLeft,
+            totalSeconds: session.totalSeconds,
+            reason: 'app_background',
+          });
+
+          // 2. Phạt trừ 5 điểm
+          addPoints({
+            id: `p_${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
+            points: -5,
+            reason: 'abandon_penalty',
+            description: `Trừ điểm do thoát app khi đang học`,
+          });
+
+          // 3. Hủy phiên học hiện tại
+          setActiveSession(null);
+
+          // Đánh dấu để hiển thị Alert khi mở lại ứng dụng
+          hasAbandonedInBackgroundRef.current = true;
+
+          // Expo Go Android không hỗ trợ push notifications từ SDK 53+.
+          // Alert khi quay lại app vẫn báo rõ phiên bị dừng và trừ điểm.
+        }
+      } else if (nextAppState === 'active') {
+        // Khi mở lại ứng dụng -> Kiểm tra nếu trước đó bị bỏ dở trong nền thì hiện Alert
+        if (hasAbandonedInBackgroundRef.current) {
+          hasAbandonedInBackgroundRef.current = false;
+          Alert.alert(
+            'Phiên tập trung đã dừng',
+            'Bạn rời ứng dụng khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
+            [
+              {
+                text: 'Đồng ý',
+                onPress: () => {
+                  if (navigationRef.isReady()) {
+                    navigationRef.navigate('Focus');
+                  }
+                },
+              },
+            ]
+          );
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [logAbandon, addPoints, setActiveSession]);
+
+  // Detect chuyển tab → log abandon nếu đang chạy Pomodoro
+  const handleTabChange = (state: NavigationState | undefined) => {
+    if (!state) return;
+    const activeRoute = state.routes[state.index].name;
+    const prevRoute = prevTabRef.current;
+    prevTabRef.current = activeRoute;
+    setCurrentTab(activeRoute);
+
+    // Đóng hướng dẫn đang mở khi người dùng chuyển sang tab khác.
+    const store = useFocusStore.getState();
+    if (store.tutorialActiveTab && store.tutorialActiveTab !== activeRoute) {
+      store.skipTutorial();
+    }
+    const nextStore = useFocusStore.getState();
+    if (
+      activeSessionRef.current === null &&
+      !nextStore.tutorialActiveTab &&
+      !nextStore.completedTutorialTabs.includes(activeRoute)
+    ) {
+      nextStore.startTutorial(activeRoute);
+    }
+
+    if (prevRoute === 'Focus' && activeRoute !== 'Focus' && activeSession !== null) {
+      if (!hasLoggedSwitchRef.current) {
+        hasLoggedSwitchRef.current = true;
+        
+        // 1. Ghi log abandon
+        logAbandon({
+          timestamp: new Date().toISOString(),
+          date: new Date().toISOString().split('T')[0],
+          subjectId: activeSession.subjectId,
+          taskId: activeSession.taskId,
+          mode: activeSession.mode,
+          timeLeftSeconds: activeSession.timeLeft,
+          elapsedSeconds: activeSession.totalSeconds - activeSession.timeLeft,
+          totalSeconds: activeSession.totalSeconds,
+          reason: 'tab_switch',
+        });
+
+        // 2. Trừ 5 điểm do chuyển tab bỏ học
+        addPoints({
+          id: `p_${Date.now()}`,
+          date: new Date().toISOString().split('T')[0],
+          points: -5,
+          reason: 'abandon_penalty',
+          description: `Trừ điểm do chuyển màn hình khi đang học`,
+        });
+
+        setActiveSession(null);
+
+        Alert.alert(
+          'Phiên tập trung đã dừng',
+          'Bạn chuyển màn hình khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
+          [
+            {
+              text: 'Đồng ý',
+              onPress: () => {
+                if (navigationRef.isReady()) {
+                  navigationRef.navigate('Focus');
+                }
+              },
+            },
+          ]
+        );
+      }
+    } else if (activeRoute === 'Focus') {
+      hasLoggedSwitchRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!activeSession) hasLoggedSwitchRef.current = false;
+  }, [activeSession]);
+
+  // App startup effects
+  useEffect(() => {
+    // (Start screen handles onboarding redirect to Focus screen)
+  }, []);
+
+  const showBanner = activeSession !== null && currentTab !== 'Focus';
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
+    <View style={{ flex: 1 }}>
+      <NavigationContainer
+        ref={navigationRef}
+        onStateChange={handleTabChange}
+      >
+        <StatusBar style="auto" />
+        <Tab.Navigator
+          screenOptions={({ route }) => {
+            const config = TAB_CONFIG.find((t) => t.name === route.name);
+            return {
+              headerShown: false,
+              tabBarIcon: ({ focused, color, size }) => (
+                <Ionicons
+                  name={focused ? (config?.iconActive ?? 'home') : (config?.icon ?? 'home-outline')}
+                  size={size}
+                  color={color}
+                />
+              ),
+              tabBarActiveTintColor: COLORS.primary,
+              tabBarInactiveTintColor: COLORS.tabInactive,
+              tabBarLabel: config?.label ?? route.name,
+              tabBarStyle: {
+                backgroundColor: '#fff',
+                borderTopWidth: 0,
+                elevation: 20,
+                shadowColor: '#6C63FF',
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.08,
+                shadowRadius: 16,
+                height: Platform.OS === 'ios' ? 88 : 64 + Math.max(insets.bottom, 8),
+                paddingBottom: Platform.OS === 'ios' ? 24 : Math.max(insets.bottom, 8),
+                paddingTop: 8,
+              },
+              tabBarLabelStyle: {
+                fontSize: FONT_SIZE.xs,
+                fontWeight: FONT_WEIGHT.medium,
+              },
+            };
+          }}
+        >
+          {TAB_CONFIG.map((tab) => (
+            <Tab.Screen
+              key={tab.name}
+              name={tab.name}
+              component={tab.component}
+            />
+          ))}
+        </Tab.Navigator>
+      </NavigationContainer>
+
+      {/* Global banner — hiện khi đang Pomodoro ở tab khác */}
+      {showBanner && activeSession && (
+        <PomodoroActiveBanner
+          timeLeft={activeSession.timeLeft}
+          isRunning={true}
+          mode={activeSession.mode}
+          onPress={() => {
+            // Navigate về tab Focus → FocusScreen sẽ tự mở lại FocusLockScreen
+            if (navigationRef.isReady()) {
+              navigationRef.navigate('Focus');
+            }
+          }}
+        />
+      )}
+
+      {/* Welcome Start Screen Overlay */}
+      {!hasCompletedOnboarding && (
+        <OnboardingStartScreen onStart={handleStartApp} />
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppInner />
+    </SafeAreaProvider>
+  );
+}

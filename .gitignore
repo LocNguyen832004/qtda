@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Expo start logs
+.expo-start.err.log
+.expo-start.out.log
+
+# IDE / Assistant configs
+.claude/
+CLAUDE.md
+AGENTS.md
