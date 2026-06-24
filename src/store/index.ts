@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Subject, StudyTask, FocusSession, PointTransaction, ScheduleSlot, TaskStatus, AbandonLog, AbandonReason } from '../types';
+import { supabase } from '../lib/supabase';
 
 const DEFAULT_SUBJECT: Subject = {
   id: 's_general',
@@ -27,22 +28,48 @@ export const useSubjectStore = create<SubjectState>()(
     (set, get) => ({
       subjects: [DEFAULT_SUBJECT],
       getSubjectById: (id) => get().subjects.find((s) => s.id === id),
-      addSubject: (subject) =>
-        set((state) => ({ subjects: [...state.subjects, subject] })),
-      updateSubject: (id, updatedFields) =>
+      addSubject: async (subject) => {
+        set((state) => ({ subjects: [...state.subjects, subject] }));
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('subjects').insert({
+            id: subject.id,
+            user_id: user.id,
+            name: subject.name,
+            short_name: subject.shortName,
+            color: subject.color,
+            target_hours: subject.targetHours,
+          });
+        }
+      },
+      updateSubject: async (id, updatedFields) => {
         set((state) => ({
           subjects: state.subjects.map((s) =>
             s.id === id ? { ...s, ...updatedFields } : s
           ),
-        })),
-      deleteSubject: (id) => {
-        if (id === 's_general') return; // Do not allow deleting the default subject
+        }));
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('subjects').update({
+            name: updatedFields.name,
+            short_name: updatedFields.shortName,
+            color: updatedFields.color,
+            target_hours: updatedFields.targetHours,
+          }).eq('id', id);
+        }
+      },
+      deleteSubject: async (id) => {
+        if (id === 's_general') return;
         set((state) => ({
           subjects: state.subjects.filter((s) => s.id !== id),
         }));
-        // Cascade delete tasks and schedule slots associated with this subject
         useTaskStore.getState().deleteTasksBySubject(id);
         useScheduleStore.getState().deleteSlotsBySubject(id);
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('subjects').delete().eq('id', id);
+        }
       },
       reset: () => set({ subjects: [DEFAULT_SUBJECT] }),
     }),
@@ -70,20 +97,32 @@ export const useTaskStore = create<TaskState>()(
   persist(
     (set) => ({
       tasks: [],
-      toggleTaskDone: (id) =>
+      toggleTaskDone: async (id) => {
+        let newStatus = 'todo';
         set((state) => ({
-          tasks: state.tasks.map((t) =>
-            t.id === id
-              ? {
-                  ...t,
-                  status: t.status === 'done' ? 'todo' : 'done',
-                  completedAt: t.status !== 'done' ? new Date().toISOString() : undefined,
-                  actualPomodoros: t.status !== 'done' ? Math.max(t.actualPomodoros, t.estimatedPomodoros) : t.actualPomodoros,
-                }
-              : t
-          ),
-        })),
-      updateTaskStatus: (id, status) =>
+          tasks: state.tasks.map((t) => {
+            if (t.id === id) {
+              newStatus = t.status === 'done' ? 'todo' : 'done';
+              return {
+                ...t,
+                status: newStatus as TaskStatus,
+                completedAt: newStatus === 'done' ? new Date().toISOString() : undefined,
+                actualPomodoros: newStatus === 'done' ? Math.max(t.actualPomodoros, t.estimatedPomodoros) : t.actualPomodoros,
+              };
+            }
+            return t;
+          }),
+        }));
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('tasks').update({ 
+            status: newStatus,
+            completed_at: newStatus === 'done' ? new Date().toISOString() : null
+          }).eq('id', id);
+        }
+      },
+      updateTaskStatus: async (id, status) => {
         set((state) => ({
           tasks: state.tasks.map((t) =>
             t.id === id
@@ -94,19 +133,51 @@ export const useTaskStore = create<TaskState>()(
                 }
               : t
           ),
-        })),
-      addTask: (task) =>
-        set((state) => ({ tasks: [task, ...state.tasks] })),
-      updateTask: (id, updatedFields) =>
+        }));
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('tasks').update({ 
+            status: status,
+            completed_at: status === 'done' ? new Date().toISOString() : null
+          }).eq('id', id);
+        }
+      },
+      addTask: async (task) => {
+        set((state) => ({ tasks: [task, ...state.tasks] }));
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // Lưu ý: Nếu subjectId là 's_general', trong DB bạn cần đảm bảo record subject s_general đã tồn tại
+          // Nếu không FK constraint sẽ báo lỗi. Ở đây ta try catch để không crash.
+          try {
+            await supabase.from('tasks').insert({
+              id: task.id,
+              user_id: user.id,
+              subject_id: task.subjectId,
+              title: task.title,
+              status: task.status,
+              due_date: task.dueDate || null,
+            });
+          } catch(e) {}
+        }
+      },
+      updateTask: async (id, updatedFields) => {
         set((state) => ({
           tasks: state.tasks.map((t) =>
             t.id === id ? { ...t, ...updatedFields } : t
           ),
-        })),
-      deleteTask: (id) =>
+        }));
+      },
+      deleteTask: async (id) => {
         set((state) => ({
           tasks: state.tasks.filter((t) => t.id !== id),
-        })),
+        }));
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('tasks').delete().eq('id', id);
+        }
+      },
       deleteTasksBySubject: (subjectId) =>
         set((state) => ({
           tasks: state.tasks.filter((t) => t.subjectId !== subjectId),
@@ -244,8 +315,27 @@ export const useFocusStore = create<FocusState>()(
       tutorialActiveTab: null,
       tutorialActiveStep: null,
       hasCompletedOnboarding: false,
-      addSession: (session) =>
-        set((state) => ({ sessions: [session, ...state.sessions] })),
+      addSession: async (session) => {
+        set((state) => ({ sessions: [session, ...state.sessions] }));
+        
+        // Sync lên Supabase
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+           const startedAt = new Date(Date.now() - session.durationMinutes * 60000).toISOString();
+           try {
+             await supabase.from('focus_sessions').insert({
+                id: session.id,
+                user_id: user.id,
+                subject_id: session.subjectId,
+                task_id: session.taskId || null,
+                started_at: startedAt,
+                ended_at: new Date().toISOString(),
+                duration_minutes: session.durationMinutes,
+                completed: true,
+             });
+           } catch(e) {}
+        }
+      },
       addPoints: (tx) =>
         set((state) => ({
           points: [tx, ...state.points],
@@ -259,13 +349,30 @@ export const useFocusStore = create<FocusState>()(
         })),
       setActiveSubjectId: (id) => set({ activeSubjectId: id }),
       setActiveTaskId: (id) => set({ activeTaskId: id }),
-      logAbandon: (log) =>
+      logAbandon: async (log) => {
+        const newLog = { ...log, id: `ab_${Date.now()}` };
         set((state) => ({
-          abandonLogs: [
-            { ...log, id: `ab_${Date.now()}` },
-            ...state.abandonLogs,
-          ].slice(0, 100), // giữ tối đa 100 entries
-        })),
+          abandonLogs: [newLog, ...state.abandonLogs].slice(0, 100),
+        }));
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+           const startedAt = new Date(Date.now() - log.elapsedSeconds * 1000).toISOString();
+           try {
+             await supabase.from('focus_sessions').insert({
+                id: newLog.id,
+                user_id: user.id,
+                subject_id: log.subjectId,
+                task_id: log.taskId || null,
+                started_at: startedAt,
+                ended_at: new Date().toISOString(),
+                duration_minutes: Math.round(log.totalSeconds / 60),
+                completed: false,
+                abandon_reason: log.reason
+             });
+           } catch(e) {}
+        }
+      },
       setActiveSession: (session) => set({ activeSession: session }),
       clearOldAbandonLogs: () => {
         const cutoff = new Date();

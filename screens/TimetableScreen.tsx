@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, SafeAreaView
+  View, Text, ScrollView, StyleSheet, TouchableOpacity
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScheduleCard } from '../src/components/timetable/ScheduleCard';
 import { ScheduleFormModal } from '../src/components/timetable/ScheduleFormModal';
 import { TouchableScale } from '../src/components/ui/TouchableScale';
@@ -232,7 +233,7 @@ const styles = StyleSheet.create({
     marginRight: -10,
   },
   tutorialBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as object,
     backgroundColor: 'rgba(10, 11, 22, 0.72)',
     zIndex: 1000,
   },

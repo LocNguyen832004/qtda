@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, SafeAreaView
+  View, Text, ScrollView, StyleSheet, TouchableOpacity
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTaskStore, useSubjectStore, useFocusStore } from '../src/store';
 import { TaskFormModal } from '../src/components/tasks/TaskFormModal';
@@ -368,7 +369,7 @@ const styles = StyleSheet.create({
     marginRight: -10,
   },
   tutorialBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as object,
     backgroundColor: 'rgba(10, 11, 22, 0.72)',
     zIndex: 1000,
   },

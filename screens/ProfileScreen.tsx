@@ -4,11 +4,12 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
+  Image,
   Alert,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusStore, useTaskStore, useSubjectStore, useScheduleStore } from '../src/store';
@@ -19,6 +20,7 @@ import { TouchableScale } from '../src/components/ui/TouchableScale';
 import { dateToString, getWeekDates, getDayName } from '../src/utils/dateUtils';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
 import { MUSIC_TRACKS, MusicTrack } from '../src/hooks/useAudioPlayer';
+import { supabase } from '../src/lib/supabase';
 
 const MODE_EMOJI: Record<string, string> = {
   pomodoro: '⏱️',
@@ -100,6 +102,48 @@ export default function ProfileScreen() {
             useFocusStore.getState().reset();
             setSettingsVisible(false);
             Alert.alert('Thành công', 'Đã xóa dữ liệu và đưa ứng dụng về trạng thái ban đầu.');
+          }
+        }
+      ]
+    );
+  };
+
+  const handleLogout = async () => {
+    Alert.alert('Đăng xuất', 'Bạn có chắc chắn muốn đăng xuất?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Đăng xuất',
+        style: 'destructive',
+        onPress: async () => {
+          setSettingsVisible(false);
+          await supabase.auth.signOut();
+        }
+      }
+    ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'CẢNH BÁO NGUY HIỂM',
+      'Bạn chuẩn bị XÓA VĨNH VIỄN tài khoản và toàn bộ dữ liệu. Hành động này KHÔNG THỂ hoàn tác. Bạn có chắc chắn muốn xóa?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa tài khoản',
+          style: 'destructive',
+          onPress: async () => {
+            setSettingsVisible(false);
+            // Gọi hàm RPC xóa toàn bộ dữ liệu ở Backend (Nếu chưa có thì tự động sign out rồi xử lý sau)
+            const { error } = await supabase.rpc('delete_user_account');
+            if (error) {
+               Alert.alert(
+                 'Chưa cấu hình Server', 
+                 'Chức năng này yêu cầu Admin cấu hình RPC "delete_user_account" trên Supabase. Tạm thời chúng tôi sẽ Đăng xuất bạn.'
+               );
+            } else {
+               Alert.alert('Thành công', 'Tài khoản của bạn đã được xóa vĩnh viễn khỏi hệ thống.');
+            }
+            await supabase.auth.signOut();
           }
         }
       ]
@@ -623,6 +667,25 @@ export default function ProfileScreen() {
             <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
             <Text style={styles.btnResetDataText}>Đặt lại dữ liệu app (test)</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.btnResetData, { borderColor: COLORS.textSecondary, backgroundColor: COLORS.textSecondary + '15', marginTop: 12 }]} 
+            onPress={handleLogout} 
+            activeOpacity={0.8}
+          >
+            <Ionicons name="log-out-outline" size={18} color={COLORS.textSecondary} />
+            <Text style={[styles.btnResetDataText, { color: COLORS.textSecondary }]}>Đăng xuất tài khoản</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.btnResetData, { borderColor: 'transparent', backgroundColor: 'transparent', marginTop: 12 }]} 
+            onPress={handleDeleteAccount} 
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.btnResetDataText, { color: COLORS.danger, textDecorationLine: 'underline', fontSize: FONT_SIZE.sm }]}>
+              Xóa tài khoản vĩnh viễn
+            </Text>
+          </TouchableOpacity>
         </View>
       </ModalContainer>
     </SafeAreaView>
@@ -696,7 +759,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
   },
   tutorialBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as object,
     backgroundColor: 'rgba(10, 11, 22, 0.72)',
     zIndex: 1000,
   },

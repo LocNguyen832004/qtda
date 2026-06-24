@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, SafeAreaView, Alert, TextInput
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, TextInput, AppState
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubjectStore, useFocusStore, useTaskStore } from '../src/store';
@@ -202,7 +203,31 @@ export default function FocusScreen() {
     setTimeLeft(modeDurationInSeconds[mode]);
   };
 
-  const handleAbandon = () => {
+  const backgroundStartTime = useRef<number | null>(null);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState.match(/inactive|background/)) {
+        if (isRunning && activeSession) {
+          backgroundStartTime.current = Date.now();
+        }
+      } else if (nextAppState === 'active') {
+        if (backgroundStartTime.current && isRunning && activeSession) {
+          const elapsedSeconds = (Date.now() - backgroundStartTime.current) / 1000;
+          if (elapsedSeconds > 60) {
+            handleAbandon('app_background');
+          }
+        }
+        backgroundStartTime.current = null;
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isRunning, activeSession]);
+
+  const handleAbandon = (reason: 'back_button' | 'app_background' = 'back_button') => {
     const session = activeSession;
     if (!session) {
       handleReset();
@@ -218,7 +243,7 @@ export default function FocusScreen() {
       timeLeftSeconds: session.timeLeft,
       elapsedSeconds: session.totalSeconds - session.timeLeft,
       totalSeconds: session.totalSeconds,
-      reason: 'back_button',
+      reason: reason,
     });
     addPoints({
       id: `p_${Date.now()}`,
@@ -230,7 +255,12 @@ export default function FocusScreen() {
     setActiveSession(null);
     setIsRunning(false);
     setTimeLeft(modeDurationInSeconds[mode]);
-    Alert.alert('Phien tap trung da dung', 'Phien nay bi tinh bo do va tru 5 diem.');
+    
+    if (reason === 'app_background') {
+      Alert.alert('Cảnh báo vi phạm', 'Bạn đã rời ứng dụng quá 60 giây. Phiên học bị hủy và trừ 5 điểm.');
+    } else {
+      Alert.alert('Phiên tập trung đã dừng', 'Phiên này bị tính bỏ dở và trừ 5 điểm.');
+    }
   };
 
   const handleSaveSettings = () => {
@@ -575,7 +605,7 @@ export default function FocusScreen() {
         mode={activeSession?.mode ?? mode}
         timeLeft={activeSession?.timeLeft ?? timeLeft}
         isRunning={isRunning}
-        onBack={handleAbandon}
+        onBack={() => handleAbandon('back_button')}
         onTogglePause={handleStartOrPause}
         onComplete={handleComplete}
       />
@@ -587,7 +617,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   scroll: { padding: SPACING.md, paddingBottom: 40, position: 'relative' },
   tutorialBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as object,
     backgroundColor: 'rgba(10, 11, 22, 0.72)',
     zIndex: 1000,
   },
@@ -632,9 +662,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...SHADOW.lg,
   },
-  timerGradientBg: { ...StyleSheet.absoluteFillObject },
+  timerGradientBg: { ...StyleSheet.absoluteFill as object },
   progressRing: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as object,
     borderRadius: 110,
     borderWidth: 12,
     margin: 6,

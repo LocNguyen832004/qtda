@@ -20,6 +20,10 @@ import { COLORS, FONT_SIZE, FONT_WEIGHT } from './src/utils/theme';
 import { PomodoroActiveBanner } from './src/components/focus/PomodoroActiveBanner';
 import { useFocusStore } from './src/store';
 import { OnboardingStartScreen } from './src/components/onboarding/OnboardingStartScreen';
+import { supabase } from './src/lib/supabase';
+import { Session } from '@supabase/supabase-js';
+import AuthScreen from './screens/AuthScreen';
+import AdminScreen from './screens/AdminScreen';
 
 const Tab = createBottomTabNavigator();
 const navigationRef = createNavigationContainerRef<any>();
@@ -45,6 +49,8 @@ function AppInner() {
   const insets = useSafeAreaInsets();
   const { activeSession, logAbandon, setActiveSession, addPoints, hasCompletedOnboarding, completeOnboarding, startTutorial } = useFocusStore();
   const [currentTab, setCurrentTab] = useState('Today');
+  const [session, setSession] = useState<Session | null>(null);
+  const [userRole, setUserRole] = useState<'student' | 'admin'>('student');
   const prevTabRef = useRef('Today');
   const hasLoggedSwitchRef = useRef(false);
   const hasAbandonedInBackgroundRef = useRef(false);
@@ -204,10 +210,40 @@ function AppInner() {
 
   // App startup effects
   useEffect(() => {
-    // (Start screen handles onboarding redirect to Focus screen)
+    const fetchSessionAndRole = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      if (session) {
+        const { data } = await supabase.from('users').select('role').eq('id', session.user.id).single();
+        if (data) setUserRole(data.role);
+      }
+    };
+    
+    fetchSessionAndRole();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (session) {
+        const { data } = await supabase.from('users').select('role').eq('id', session.user.id).single();
+        if (data) setUserRole(data.role);
+      } else {
+        setUserRole('student');
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const showBanner = activeSession !== null && currentTab !== 'Focus';
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
+  const activeTabs = [...TAB_CONFIG];
+  if (userRole === 'admin') {
+    activeTabs.push({ name: 'Admin', label: 'Admin', icon: 'shield-outline', iconActive: 'shield', component: AdminScreen });
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -218,7 +254,7 @@ function AppInner() {
         <StatusBar style="auto" />
         <Tab.Navigator
           screenOptions={({ route }) => {
-            const config = TAB_CONFIG.find((t) => t.name === route.name);
+            const config = activeTabs.find((t) => t.name === route.name);
             return {
               headerShown: false,
               tabBarIcon: ({ focused, color, size }) => (
@@ -250,7 +286,7 @@ function AppInner() {
             };
           }}
         >
-          {TAB_CONFIG.map((tab) => (
+          {activeTabs.map((tab) => (
             <Tab.Screen
               key={tab.name}
               name={tab.name}

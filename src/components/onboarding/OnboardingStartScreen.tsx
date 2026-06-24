@@ -142,7 +142,7 @@ export const OnboardingStartScreen: React.FC<OnboardingStartScreenProps> = ({ on
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as object,
     zIndex: 9999,
   },
   gradient: {
@@ -200,8 +200,9 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
     marginTop: 20,
+    paddingHorizontal: SPACING.lg,
   },
   appTitle: {
     fontSize: 28,

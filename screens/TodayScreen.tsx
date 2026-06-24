@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, SafeAreaView
+  View, Text, ScrollView, StyleSheet, TouchableOpacity
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTaskStore, useFocusStore, useScheduleStore } from '../src/store';
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
   },
   tutorialBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as object,
     backgroundColor: 'rgba(10, 11, 22, 0.72)',
     zIndex: 1000,
   },

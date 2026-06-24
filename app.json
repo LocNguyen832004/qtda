@@ -19,7 +19,10 @@
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
-      "expo-audio"
+      "expo-audio",
+      "expo-asset",
+      "expo-font",
+      "expo-status-bar"
     ]
   }
 }
