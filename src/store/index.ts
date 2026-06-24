@@ -30,16 +30,20 @@ export const useSubjectStore = create<SubjectState>()(
       getSubjectById: (id) => get().subjects.find((s) => s.id === id),
       addSubject: async (subject) => {
         set((state) => ({ subjects: [...state.subjects, subject] }));
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('subjects').insert({
-            id: subject.id,
-            user_id: user.id,
-            name: subject.name,
-            short_name: subject.shortName,
-            color: subject.color,
-            target_hours: subject.targetHours,
-          });
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('subjects').insert({
+              id: subject.id,
+              user_id: user.id,
+              name: subject.name,
+              short_name: subject.shortName,
+              color: subject.color,
+              target_hours: subject.targetHours,
+            });
+          }
+        } catch (e) {
+          console.error('Error adding subject to Supabase:', e);
         }
       },
       updateSubject: async (id, updatedFields) => {
@@ -48,14 +52,18 @@ export const useSubjectStore = create<SubjectState>()(
             s.id === id ? { ...s, ...updatedFields } : s
           ),
         }));
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('subjects').update({
-            name: updatedFields.name,
-            short_name: updatedFields.shortName,
-            color: updatedFields.color,
-            target_hours: updatedFields.targetHours,
-          }).eq('id', id);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('subjects').update({
+              name: updatedFields.name,
+              short_name: updatedFields.shortName,
+              color: updatedFields.color,
+              target_hours: updatedFields.targetHours,
+            }).eq('id', id);
+          }
+        } catch (e) {
+          console.error('Error updating subject in Supabase:', e);
         }
       },
       deleteSubject: async (id) => {
@@ -66,9 +74,26 @@ export const useSubjectStore = create<SubjectState>()(
         useTaskStore.getState().deleteTasksBySubject(id);
         useScheduleStore.getState().deleteSlotsBySubject(id);
         
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('subjects').delete().eq('id', id);
+        // Chuyển các session và log bỏ dở liên quan sang môn học mặc định "s_general" để bảo toàn lịch sử học tập
+        const focusStore = useFocusStore.getState();
+        const updatedSessions = (focusStore.sessions || []).map((sess) =>
+          sess.subjectId === id ? { ...sess, subjectId: 's_general' } : sess
+        );
+        const updatedAbandonLogs = (focusStore.abandonLogs || []).map((log) =>
+          log.subjectId === id ? { ...log, subjectId: 's_general' } : log
+        );
+        useFocusStore.setState({
+          sessions: updatedSessions,
+          abandonLogs: updatedAbandonLogs,
+        });
+
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('subjects').delete().eq('id', id);
+          }
+        } catch (e) {
+          console.error('Error deleting subject from Supabase:', e);
         }
       },
       reset: () => set({ subjects: [DEFAULT_SUBJECT] }),
@@ -114,12 +139,16 @@ export const useTaskStore = create<TaskState>()(
           }),
         }));
         
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('tasks').update({ 
-            status: newStatus,
-            completed_at: newStatus === 'done' ? new Date().toISOString() : null
-          }).eq('id', id);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('tasks').update({ 
+              status: newStatus,
+              completed_at: newStatus === 'done' ? new Date().toISOString() : null
+            }).eq('id', id);
+          }
+        } catch (e) {
+          console.error('Error toggling task in Supabase:', e);
         }
       },
       updateTaskStatus: async (id, status) => {
@@ -135,22 +164,24 @@ export const useTaskStore = create<TaskState>()(
           ),
         }));
         
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('tasks').update({ 
-            status: status,
-            completed_at: status === 'done' ? new Date().toISOString() : null
-          }).eq('id', id);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('tasks').update({ 
+              status: status,
+              completed_at: status === 'done' ? new Date().toISOString() : null
+            }).eq('id', id);
+          }
+        } catch (e) {
+          console.error('Error updating task status in Supabase:', e);
         }
       },
       addTask: async (task) => {
         set((state) => ({ tasks: [task, ...state.tasks] }));
         
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          // Lưu ý: Nếu subjectId là 's_general', trong DB bạn cần đảm bảo record subject s_general đã tồn tại
-          // Nếu không FK constraint sẽ báo lỗi. Ở đây ta try catch để không crash.
-          try {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
             await supabase.from('tasks').insert({
               id: task.id,
               user_id: user.id,
@@ -159,7 +190,9 @@ export const useTaskStore = create<TaskState>()(
               status: task.status,
               due_date: task.dueDate || null,
             });
-          } catch(e) {}
+          }
+        } catch(e) {
+          console.error('Error adding task to Supabase:', e);
         }
       },
       updateTask: async (id, updatedFields) => {
@@ -173,9 +206,13 @@ export const useTaskStore = create<TaskState>()(
         set((state) => ({
           tasks: state.tasks.filter((t) => t.id !== id),
         }));
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('tasks').delete().eq('id', id);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('tasks').delete().eq('id', id);
+          }
+        } catch (e) {
+          console.error('Error deleting task from Supabase:', e);
         }
       },
       deleteTasksBySubject: (subjectId) =>
@@ -247,6 +284,13 @@ export const useScheduleStore = create<ScheduleState>()(
 );
 
 // ─── Focus Store ──────────────────────────────────────────────────────────────
+interface OnboardingProgress {
+  hasCompletedOnboarding: boolean;
+  completedTutorialTabs: string[];
+}
+
+const GUEST_ONBOARDING_USER_ID = '__guest__';
+
 export interface ActivePomodoroSession {
   subjectId: string;
   taskId?: string;
@@ -270,6 +314,8 @@ interface FocusState {
   abandonLogs: AbandonLog[];
   activeSession: ActivePomodoroSession | null;
   // Tutorial tracking
+  onboardingByUser: Record<string, OnboardingProgress>;
+  activeOnboardingUserId: string | null;
   completedTutorialTabs: string[];
   tutorialActiveTab: string | null;
   tutorialActiveStep: number | null;
@@ -286,6 +332,7 @@ interface FocusState {
   clearOldAbandonLogs: () => void;
   
   // Tutorial Actions
+  syncOnboardingForUser: (userId: string | null) => void;
   startTutorial: (tabName: string) => void;
   nextTutorialStep: () => void;
   prevTutorialStep: () => void;
@@ -311,6 +358,8 @@ export const useFocusStore = create<FocusState>()(
       unlockedMusicIds: ['m_lofi'],
       abandonLogs: [],
       activeSession: null,
+      onboardingByUser: {},
+      activeOnboardingUserId: GUEST_ONBOARDING_USER_ID,
       completedTutorialTabs: [],
       tutorialActiveTab: null,
       tutorialActiveStep: null,
@@ -319,10 +368,10 @@ export const useFocusStore = create<FocusState>()(
         set((state) => ({ sessions: [session, ...state.sessions] }));
         
         // Sync lên Supabase
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-           const startedAt = new Date(Date.now() - session.durationMinutes * 60000).toISOString();
-           try {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+             const startedAt = new Date(Date.now() - session.durationMinutes * 60000).toISOString();
              await supabase.from('focus_sessions').insert({
                 id: session.id,
                 user_id: user.id,
@@ -333,7 +382,9 @@ export const useFocusStore = create<FocusState>()(
                 duration_minutes: session.durationMinutes,
                 completed: true,
              });
-           } catch(e) {}
+          }
+        } catch(e) {
+          console.error('Error adding focus session to Supabase:', e);
         }
       },
       addPoints: (tx) =>
@@ -355,10 +406,10 @@ export const useFocusStore = create<FocusState>()(
           abandonLogs: [newLog, ...state.abandonLogs].slice(0, 100),
         }));
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-           const startedAt = new Date(Date.now() - log.elapsedSeconds * 1000).toISOString();
-           try {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+             const startedAt = new Date(Date.now() - log.elapsedSeconds * 1000).toISOString();
              await supabase.from('focus_sessions').insert({
                 id: newLog.id,
                 user_id: user.id,
@@ -370,7 +421,9 @@ export const useFocusStore = create<FocusState>()(
                 completed: false,
                 abandon_reason: log.reason
              });
-           } catch(e) {}
+          }
+        } catch(e) {
+          console.error('Error logging abandon to Supabase:', e);
         }
       },
       setActiveSession: (session) => set({ activeSession: session }),
@@ -402,6 +455,33 @@ export const useFocusStore = create<FocusState>()(
           totalPoints: state.totalPoints - cost,
         }));
         return true;
+      },
+      syncOnboardingForUser: (userId) => {
+        const state = get();
+        const currentUserId = state.activeOnboardingUserId ?? GUEST_ONBOARDING_USER_ID;
+        const nextUserId = userId ?? GUEST_ONBOARDING_USER_ID;
+        if (currentUserId === nextUserId) return;
+
+        const onboardingByUser = {
+          ...state.onboardingByUser,
+          [currentUserId]: {
+            hasCompletedOnboarding: state.hasCompletedOnboarding,
+            completedTutorialTabs: state.completedTutorialTabs,
+          },
+        };
+        const nextProgress = onboardingByUser[nextUserId] ?? {
+          hasCompletedOnboarding: false,
+          completedTutorialTabs: [],
+        };
+
+        set({
+          onboardingByUser,
+          activeOnboardingUserId: nextUserId,
+          hasCompletedOnboarding: nextProgress.hasCompletedOnboarding,
+          completedTutorialTabs: nextProgress.completedTutorialTabs,
+          tutorialActiveTab: null,
+          tutorialActiveStep: null,
+        });
       },
       startTutorial: (tabName) => {
         const state = get();
@@ -455,8 +535,20 @@ export const useFocusStore = create<FocusState>()(
         }));
       },
       completeOnboarding: () => set({ hasCompletedOnboarding: true }),
-      resetTutorials: () => set({ completedTutorialTabs: [], tutorialActiveTab: null, tutorialActiveStep: null, hasCompletedOnboarding: false }),
-      reset: () => set({ sessions: [], points: [], totalPoints: 130, activeSubjectId: null, activeTaskId: null, unlockedMusicIds: ['m_lofi'], abandonLogs: [], activeSession: null, completedTutorialTabs: [], tutorialActiveTab: null, tutorialActiveStep: null, hasCompletedOnboarding: false }),
+      resetTutorials: () => set((state) => ({
+        completedTutorialTabs: [],
+        tutorialActiveTab: null,
+        tutorialActiveStep: null,
+        hasCompletedOnboarding: false,
+        onboardingByUser: {
+          ...state.onboardingByUser,
+          [state.activeOnboardingUserId ?? GUEST_ONBOARDING_USER_ID]: {
+            hasCompletedOnboarding: false,
+            completedTutorialTabs: [],
+          },
+        },
+      })),
+      reset: () => set({ sessions: [], points: [], totalPoints: 130, activeSubjectId: null, activeTaskId: null, unlockedMusicIds: ['m_lofi'], abandonLogs: [], activeSession: null, onboardingByUser: {}, activeOnboardingUserId: GUEST_ONBOARDING_USER_ID, completedTutorialTabs: [], tutorialActiveTab: null, tutorialActiveStep: null, hasCompletedOnboarding: false }),
     }),
     {
       name: 'studycommit-focus',

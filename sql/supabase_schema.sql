@@ -109,3 +109,29 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+
+-- ==========================================
+-- DELETE ACCOUNT RPC
+-- ==========================================
+-- Cho phep user dang dang nhap xoa vinh vien tai khoan cua chinh minh.
+-- Function nay can chay trong Supabase SQL Editor. Client anon key khong the tu xoa auth.users neu khong co RPC nay.
+CREATE OR REPLACE FUNCTION public.delete_user_account()
+RETURNS void AS $$
+DECLARE
+  current_user_id uuid := auth.uid();
+BEGIN
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  DELETE FROM public.focus_sessions WHERE user_id = current_user_id;
+  DELETE FROM public.tasks WHERE user_id = current_user_id;
+  DELETE FROM public.subjects WHERE user_id = current_user_id;
+  DELETE FROM public.users WHERE id = current_user_id;
+  DELETE FROM auth.users WHERE id = current_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth;
+
+REVOKE ALL ON FUNCTION public.delete_user_account() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;

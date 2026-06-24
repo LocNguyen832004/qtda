@@ -54,6 +54,7 @@ function AppInner() {
   const prevTabRef = useRef('Today');
   const hasLoggedSwitchRef = useRef(false);
   const hasAbandonedInBackgroundRef = useRef(false);
+  const backgroundTimeRef = useRef<number | null>(null);
 
   const handleStartApp = () => {
     completeOnboarding();
@@ -69,50 +70,60 @@ function AppInner() {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
 
-  // Lắng nghe trạng thái ứng dụng để phạt điểm và bắn thông báo khi chạy nền (bỏ dở)
+  // Lắng nghe trạng thái ứng dụng để phạt điểm khi ở nền quá 60s (Grace Period)
   useEffect(() => {
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       if (nextAppState === 'background') {
         const session = activeSessionRef.current;
         if (session) {
-          // 1. Ghi log abandon
-          logAbandon({
-            timestamp: new Date().toISOString(),
-            date: new Date().toISOString().split('T')[0],
-            subjectId: session.subjectId,
-            taskId: session.taskId,
-            mode: session.mode,
-            timeLeftSeconds: session.timeLeft,
-            elapsedSeconds: session.totalSeconds - session.timeLeft,
-            totalSeconds: session.totalSeconds,
-            reason: 'app_background',
-          });
-
-          // 2. Phạt trừ 5 điểm
-          addPoints({
-            id: `p_${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
-            points: -5,
-            reason: 'abandon_penalty',
-            description: `Trừ điểm do thoát app khi đang học`,
-          });
-
-          // 3. Hủy phiên học hiện tại
-          setActiveSession(null);
-
-          // Đánh dấu để hiển thị Alert khi mở lại ứng dụng
-          hasAbandonedInBackgroundRef.current = true;
-
-          // Expo Go Android không hỗ trợ push notifications từ SDK 53+.
-          // Alert khi quay lại app vẫn báo rõ phiên bị dừng và trừ điểm.
+          backgroundTimeRef.current = Date.now();
         }
       } else if (nextAppState === 'active') {
-        // Khi mở lại ứng dụng -> Kiểm tra nếu trước đó bị bỏ dở trong nền thì hiện Alert
+        const session = activeSessionRef.current;
+        if (backgroundTimeRef.current && session) {
+          const elapsedSeconds = (Date.now() - backgroundTimeRef.current) / 1000;
+          if (elapsedSeconds > 60) {
+            // Quá 60 giây -> Phạt hủy phiên
+            logAbandon({
+              timestamp: new Date().toISOString(),
+              date: new Date().toISOString().split('T')[0],
+              subjectId: session.subjectId,
+              taskId: session.taskId,
+              mode: session.mode,
+              timeLeftSeconds: session.timeLeft,
+              elapsedSeconds: session.totalSeconds - session.timeLeft,
+              totalSeconds: session.totalSeconds,
+              reason: 'app_background',
+            });
+
+            addPoints({
+              id: `p_${Date.now()}`,
+              date: new Date().toISOString().split('T')[0],
+              points: -5,
+              reason: 'abandon_penalty',
+              description: `Trừ điểm do thoát app quá 60 giây khi đang học`,
+            });
+
+            setActiveSession(null);
+            hasAbandonedInBackgroundRef.current = true;
+          } else {
+            // Dưới 60 giây -> Cho phép học tiếp, trừ hao thời gian trôi qua thực tế
+            const elapsed = Math.round(elapsedSeconds);
+            const nextTimeLeft = Math.max(0, session.timeLeft - elapsed);
+            setActiveSession({
+              ...session,
+              timeLeft: nextTimeLeft,
+            });
+          }
+        }
+        backgroundTimeRef.current = null;
+
+        // Hiển thị thông báo nếu bị hủy trong nền
         if (hasAbandonedInBackgroundRef.current) {
           hasAbandonedInBackgroundRef.current = false;
           Alert.alert(
             'Phiên tập trung đã dừng',
-            'Bạn rời ứng dụng khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
+            'Bạn rời ứng dụng quá 60 giây khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
             [
               {
                 text: 'Đồng ý',
@@ -236,14 +247,20 @@ function AppInner() {
 
   const showBanner = activeSession !== null && currentTab !== 'Focus';
 
+  if (!hasCompletedOnboarding) {
+    return <OnboardingStartScreen onStart={handleStartApp} />;
+  }
+
   if (!session) {
     return <AuthScreen />;
   }
 
-  const activeTabs = [...TAB_CONFIG];
-  if (userRole === 'admin') {
-    activeTabs.push({ name: 'Admin', label: 'Admin', icon: 'shield-outline', iconActive: 'shield', component: AdminScreen });
-  }
+  const activeTabs = userRole === 'admin'
+    ? [
+        { name: 'Admin', label: 'Quản trị', icon: 'shield-outline' as const, iconActive: 'shield' as const, component: AdminScreen },
+        { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline' as const, iconActive: 'person' as const, component: ProfileScreen },
+      ]
+    : TAB_CONFIG;
 
   return (
     <View style={{ flex: 1 }}>
@@ -311,10 +328,7 @@ function AppInner() {
         />
       )}
 
-      {/* Welcome Start Screen Overlay */}
-      {!hasCompletedOnboarding && (
-        <OnboardingStartScreen onStart={handleStartApp} />
-      )}
+
     </View>
   );
 }
