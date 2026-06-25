@@ -69,70 +69,7 @@ function AppInner() {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
 
-  // Lắng nghe trạng thái ứng dụng để phạt điểm và bắn thông báo khi chạy nền (bỏ dở)
-  useEffect(() => {
-    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'background') {
-        const session = activeSessionRef.current;
-        if (session) {
-          // 1. Ghi log abandon
-          logAbandon({
-            timestamp: new Date().toISOString(),
-            date: new Date().toISOString().split('T')[0],
-            subjectId: session.subjectId,
-            taskId: session.taskId,
-            mode: session.mode,
-            timeLeftSeconds: session.timeLeft,
-            elapsedSeconds: session.totalSeconds - session.timeLeft,
-            totalSeconds: session.totalSeconds,
-            reason: 'app_background',
-          });
-
-          // 2. Phạt trừ 5 điểm
-          addPoints({
-            id: `p_${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
-            points: -5,
-            reason: 'abandon_penalty',
-            description: `Trừ điểm do thoát app khi đang học`,
-          });
-
-          // 3. Hủy phiên học hiện tại
-          setActiveSession(null);
-
-          // Đánh dấu để hiển thị Alert khi mở lại ứng dụng
-          hasAbandonedInBackgroundRef.current = true;
-
-          // Expo Go Android không hỗ trợ push notifications từ SDK 53+.
-          // Alert khi quay lại app vẫn báo rõ phiên bị dừng và trừ điểm.
-        }
-      } else if (nextAppState === 'active') {
-        // Khi mở lại ứng dụng -> Kiểm tra nếu trước đó bị bỏ dở trong nền thì hiện Alert
-        if (hasAbandonedInBackgroundRef.current) {
-          hasAbandonedInBackgroundRef.current = false;
-          Alert.alert(
-            'Phiên tập trung đã dừng',
-            'Bạn rời ứng dụng khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
-            [
-              {
-                text: 'Đồng ý',
-                onPress: () => {
-                  if (navigationRef.isReady()) {
-                    navigationRef.navigate('Focus');
-                  }
-                },
-              },
-            ]
-          );
-        }
-      }
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => {
-      subscription.remove();
-    };
-  }, [logAbandon, addPoints, setActiveSession]);
+  // Bỏ listener AppState ở đây vì FocusScreen đã xử lý logic 60s ân hạn (grace period)
 
   // Detect chuyển tab → log abandon nếu đang chạy Pomodoro
   const handleTabChange = (state: NavigationState | undefined) => {
