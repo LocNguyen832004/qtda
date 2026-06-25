@@ -69,6 +69,7 @@ export default function FocusScreen() {
   const [inputLong, setInputLong] = useState(String(longBreakDuration));
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endTimeRef = useRef<number | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const totalTime = modeDurationInSeconds[mode];
   const progress = 1 - (totalTime > 0 ? (timeLeft / totalTime) : 0);
@@ -114,30 +115,44 @@ export default function FocusScreen() {
     }
   }, [activeSession, isRunning, mode, pomodoroDuration, shortBreakDuration, longBreakDuration]);
 
+  // Đồng bộ timeLeft từ store khi có thay đổi ngoài (ví dụ quay lại app sau khi chạy nền dưới 60s)
+  useEffect(() => {
+    if (activeSession) {
+      if (Math.abs(timeLeft - activeSession.timeLeft) > 1) {
+        setTimeLeft(activeSession.timeLeft);
+        if (isRunning) {
+          endTimeRef.current = Date.now() + activeSession.timeLeft * 1000;
+        }
+      }
+    }
+  }, [activeSession?.timeLeft]);
+
+  // Bộ đếm ngược chính xác, chống trôi lệch (drift-free timer)
   useEffect(() => {
     if (isRunning) {
+      endTimeRef.current = Date.now() + timeLeft * 1000;
       intervalRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current!);
-            handleComplete();
-            return 0;
-          }
-          const next = prev - 1;
-          const session = useFocusStore.getState().activeSession;
-          if (session) {
-            useFocusStore.getState().setActiveSession({ ...session, timeLeft: next });
-          }
-          return next;
-        });
-      }, 1000);
+        const remaining = Math.max(0, Math.round((endTimeRef.current! - Date.now()) / 1000));
+        
+        setTimeLeft(remaining);
+        
+        const session = useFocusStore.getState().activeSession;
+        if (session) {
+          useFocusStore.getState().setActiveSession({ ...session, timeLeft: remaining });
+        }
+        
+        if (remaining <= 0) {
+          clearInterval(intervalRef.current!);
+          handleComplete();
+        }
+      }, 500);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, mode, pomodoroDuration, shortBreakDuration, longBreakDuration]);
+  }, [isRunning]);
 
   const handleStartOrPause = () => {
     if (isRunning) {
@@ -203,29 +218,7 @@ export default function FocusScreen() {
     setTimeLeft(modeDurationInSeconds[mode]);
   };
 
-  const backgroundStartTime = useRef<number | null>(null);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState.match(/inactive|background/)) {
-        if (isRunning && activeSession) {
-          backgroundStartTime.current = Date.now();
-        }
-      } else if (nextAppState === 'active') {
-        if (backgroundStartTime.current && isRunning && activeSession) {
-          const elapsedSeconds = (Date.now() - backgroundStartTime.current) / 1000;
-          if (elapsedSeconds > 60) {
-            handleAbandon('app_background');
-          }
-        }
-        backgroundStartTime.current = null;
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isRunning, activeSession]);
 
   const handleAbandon = (reason: 'back_button' | 'app_background' = 'back_button') => {
     const session = activeSession;

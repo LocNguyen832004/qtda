@@ -109,48 +109,45 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
-    Alert.alert('Đăng xuất', 'Bạn có chắc chắn muốn đăng xuất?', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Đăng xuất',
-        style: 'destructive',
-        onPress: async () => {
-          setSettingsVisible(false);
-          await supabase.auth.signOut();
-        }
-      }
-    ]);
+    setSettingsVisible(false);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      Alert.alert('Loi dang xuat', error.message);
+    }
   };
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'CẢNH BÁO NGUY HIỂM',
-      'Bạn chuẩn bị XÓA VĨNH VIỄN tài khoản và toàn bộ dữ liệu. Hành động này KHÔNG THỂ hoàn tác. Bạn có chắc chắn muốn xóa?',
+      'Xoa tai khoan vinh vien',
+      'Tai khoan va toan bo du lieu tren he thong se bi xoa. Hanh dong nay khong the hoan tac.',
       [
-        { text: 'Hủy', style: 'cancel' },
+        { text: 'Huy', style: 'cancel' },
         {
-          text: 'Xóa tài khoản',
+          text: 'Xoa tai khoan',
           style: 'destructive',
           onPress: async () => {
             setSettingsVisible(false);
-            // Gọi hàm RPC xóa toàn bộ dữ liệu ở Backend (Nếu chưa có thì tự động sign out rồi xử lý sau)
             const { error } = await supabase.rpc('delete_user_account');
             if (error) {
-               Alert.alert(
-                 'Chưa cấu hình Server', 
-                 'Chức năng này yêu cầu Admin cấu hình RPC "delete_user_account" trên Supabase. Tạm thời chúng tôi sẽ Đăng xuất bạn.'
-               );
-            } else {
-               Alert.alert('Thành công', 'Tài khoản của bạn đã được xóa vĩnh viễn khỏi hệ thống.');
+              Alert.alert(
+                'Chua xoa duoc tai khoan',
+                'Supabase can co RPC delete_user_account. Hay chay SQL moi trong sql/supabase_schema.sql roi thu lai. Chi tiet: ' + error.message
+              );
+              return;
             }
+
+            useSubjectStore.getState().reset();
+            useTaskStore.getState().reset();
+            useScheduleStore.getState().reset();
+            useFocusStore.getState().reset();
             await supabase.auth.signOut();
+            Alert.alert('Da xoa tai khoan', 'Tai khoan cua ban da duoc xoa vinh vien.');
           }
         }
       ]
     );
   };
 
-  // ─── Profile Tab Calculations ────────────────────────────────────────────────
   const rankInfo = useMemo(() => {
     if (totalPoints < 100) {
       return {

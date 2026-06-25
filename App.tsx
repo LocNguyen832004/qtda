@@ -37,12 +37,12 @@ const TAB_CONFIG: {
   iconActive: IconName;
   component: React.ComponentType;
 }[] = [
-  { name: 'Today', label: 'Hôm nay', icon: 'home-outline', iconActive: 'home', component: TodayScreen },
-  { name: 'Tasks', label: 'Việc', icon: 'checkbox-outline', iconActive: 'checkbox', component: TasksScreen },
-  { name: 'Timetable', label: 'Lịch', icon: 'calendar-outline', iconActive: 'calendar', component: TimetableScreen },
-  { name: 'Focus', label: 'Tập trung', icon: 'timer-outline', iconActive: 'timer', component: FocusScreen },
-  { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline', iconActive: 'person', component: ProfileScreen },
-];
+    { name: 'Today', label: 'Hôm nay', icon: 'home-outline', iconActive: 'home', component: TodayScreen },
+    { name: 'Tasks', label: 'Việc', icon: 'checkbox-outline', iconActive: 'checkbox', component: TasksScreen },
+    { name: 'Timetable', label: 'Lịch', icon: 'calendar-outline', iconActive: 'calendar', component: TimetableScreen },
+    { name: 'Focus', label: 'Tập trung', icon: 'timer-outline', iconActive: 'timer', component: FocusScreen },
+    { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline', iconActive: 'person', component: ProfileScreen },
+  ];
 
 // ─── Inner app wrapper (đọc store hooks bên trong SafeAreaProvider) ─────────
 function AppInner() {
@@ -54,6 +54,7 @@ function AppInner() {
   const prevTabRef = useRef('Today');
   const hasLoggedSwitchRef = useRef(false);
   const hasAbandonedInBackgroundRef = useRef(false);
+  const backgroundTimeRef = useRef<number | null>(null);
 
   const handleStartApp = () => {
     completeOnboarding();
@@ -69,7 +70,70 @@ function AppInner() {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
 
-  // Bỏ listener AppState ở đây vì FocusScreen đã xử lý logic 60s ân hạn (grace period)
+  // Lắng nghe trạng thái ứng dụng để phạt điểm và bắn thông báo khi chạy nền (bỏ dở)
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background') {
+        const session = activeSessionRef.current;
+        if (session) {
+          // 1. Ghi log abandon
+          logAbandon({
+            timestamp: new Date().toISOString(),
+            date: new Date().toISOString().split('T')[0],
+            subjectId: session.subjectId,
+            taskId: session.taskId,
+            mode: session.mode,
+            timeLeftSeconds: session.timeLeft,
+            elapsedSeconds: session.totalSeconds - session.timeLeft,
+            totalSeconds: session.totalSeconds,
+            reason: 'app_background',
+          });
+
+          // 2. Phạt trừ 5 điểm
+          addPoints({
+            id: `p_${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
+            points: -5,
+            reason: 'abandon_penalty',
+            description: `Trừ điểm do thoát app khi đang học`,
+          });
+
+          // 3. Hủy phiên học hiện tại
+          setActiveSession(null);
+
+          // Đánh dấu để hiển thị Alert khi mở lại ứng dụng
+          hasAbandonedInBackgroundRef.current = true;
+
+          // Expo Go Android không hỗ trợ push notifications từ SDK 53+.
+          // Alert khi quay lại app vẫn báo rõ phiên bị dừng và trừ điểm.
+        }
+      } else if (nextAppState === 'active') {
+        // Khi mở lại ứng dụng -> Kiểm tra nếu trước đó bị bỏ dở trong nền thì hiện Alert
+        if (hasAbandonedInBackgroundRef.current) {
+          hasAbandonedInBackgroundRef.current = false;
+          Alert.alert(
+            'Phiên tập trung đã dừng',
+            'Bạn rời ứng dụng khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
+            [
+              {
+                text: 'Đồng ý',
+                onPress: () => {
+                  if (navigationRef.isReady()) {
+                    navigationRef.navigate('Focus');
+                  }
+                },
+              },
+            ]
+          );
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [logAbandon, addPoints, setActiveSession]);
 
   // Detect chuyển tab → log abandon nếu đang chạy Pomodoro
   const handleTabChange = (state: NavigationState | undefined) => {
@@ -96,7 +160,7 @@ function AppInner() {
     if (prevRoute === 'Focus' && activeRoute !== 'Focus' && activeSession !== null) {
       if (!hasLoggedSwitchRef.current) {
         hasLoggedSwitchRef.current = true;
-        
+
         // 1. Ghi log abandon
         logAbandon({
           timestamp: new Date().toISOString(),
@@ -155,7 +219,7 @@ function AppInner() {
         if (data) setUserRole(data.role);
       }
     };
-    
+
     fetchSessionAndRole();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -173,14 +237,20 @@ function AppInner() {
 
   const showBanner = activeSession !== null && currentTab !== 'Focus';
 
+  if (!hasCompletedOnboarding) {
+    return <OnboardingStartScreen onStart={handleStartApp} />;
+  }
+
   if (!session) {
     return <AuthScreen />;
   }
 
-  const activeTabs = [...TAB_CONFIG];
-  if (userRole === 'admin') {
-    activeTabs.push({ name: 'Admin', label: 'Admin', icon: 'shield-outline', iconActive: 'shield', component: AdminScreen });
-  }
+  const activeTabs = userRole === 'admin'
+    ? [
+      { name: 'Admin', label: 'Quản trị', icon: 'shield-outline' as const, iconActive: 'shield' as const, component: AdminScreen },
+      { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline' as const, iconActive: 'person' as const, component: ProfileScreen },
+    ]
+    : TAB_CONFIG;
 
   return (
     <View style={{ flex: 1 }}>
@@ -248,10 +318,7 @@ function AppInner() {
         />
       )}
 
-      {/* Welcome Start Screen Overlay */}
-      {!hasCompletedOnboarding && (
-        <OnboardingStartScreen onStart={handleStartApp} />
-      )}
+
     </View>
   );
 }
