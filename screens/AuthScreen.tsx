@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,9 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Platform,
-  Dimensions,
-  SafeAreaView
+  Dimensions
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../src/lib/supabase';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, RADIUS, SPACING, SHADOW } from '../src/utils/theme';
@@ -36,6 +36,11 @@ export default function AuthScreen() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
+
+  // Refs for TextInput fields
+  const emailInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
+  const confirmPasswordInputRef = useRef<TextInput>(null);
 
   const validate = () => {
     let valid = true;
@@ -174,7 +179,9 @@ export default function AuthScreen() {
           <Text style={styles.label}>
             Địa chỉ Email <Text style={styles.required}>*</Text>
           </Text>
-          <View
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => emailInputRef.current?.focus()}
             style={[
               styles.inputWrapper,
               focusedInput === 'email' && styles.inputWrapperFocused,
@@ -188,6 +195,7 @@ export default function AuthScreen() {
               style={styles.inputIcon}
             />
             <TextInput
+              ref={emailInputRef}
               style={styles.input}
               onChangeText={(text) => {
                 setEmail(text);
@@ -198,10 +206,12 @@ export default function AuthScreen() {
               placeholderTextColor={COLORS.textMuted}
               autoCapitalize="none"
               keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
               onFocus={() => setFocusedInput('email')}
               onBlur={() => setFocusedInput(null)}
             />
-          </View>
+          </TouchableOpacity>
           {emailError && (
             <View style={styles.errorRow}>
               <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
@@ -215,7 +225,9 @@ export default function AuthScreen() {
           <Text style={styles.label}>
             Mật khẩu <Text style={styles.required}>*</Text>
           </Text>
-          <View
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => passwordInputRef.current?.focus()}
             style={[
               styles.inputWrapper,
               focusedInput === 'password' && styles.inputWrapperFocused,
@@ -229,6 +241,7 @@ export default function AuthScreen() {
               style={styles.inputIcon}
             />
             <TextInput
+              ref={passwordInputRef}
               style={styles.input}
               onChangeText={(text) => {
                 setPassword(text);
@@ -239,6 +252,8 @@ export default function AuthScreen() {
               placeholder="Mật khẩu"
               placeholderTextColor={COLORS.textMuted}
               autoCapitalize="none"
+              autoComplete={isLogin ? "password" : "password-new"}
+              textContentType={isLogin ? "password" : "newPassword"}
               onFocus={() => setFocusedInput('password')}
               onBlur={() => setFocusedInput(null)}
             />
@@ -253,7 +268,7 @@ export default function AuthScreen() {
                 color={COLORS.textSecondary}
               />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
           {passwordError ? (
             <View style={styles.errorRow}>
               <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
@@ -272,7 +287,9 @@ export default function AuthScreen() {
             <Text style={styles.label}>
               Xác nhận mật khẩu <Text style={styles.required}>*</Text>
             </Text>
-            <View
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => confirmPasswordInputRef.current?.focus()}
               style={[
                 styles.inputWrapper,
                 focusedInput === 'confirmPassword' && styles.inputWrapperFocused,
@@ -286,6 +303,7 @@ export default function AuthScreen() {
                 style={styles.inputIcon}
               />
               <TextInput
+                ref={confirmPasswordInputRef}
                 style={styles.input}
                 onChangeText={(text) => {
                   setConfirmPassword(text);
@@ -296,6 +314,8 @@ export default function AuthScreen() {
                 placeholder="Xác nhận mật khẩu"
                 placeholderTextColor={COLORS.textMuted}
                 autoCapitalize="none"
+                autoComplete="password-new"
+                textContentType="newPassword"
                 onFocus={() => setFocusedInput('confirmPassword')}
                 onBlur={() => setFocusedInput(null)}
               />
@@ -310,7 +330,7 @@ export default function AuthScreen() {
                   color={COLORS.textSecondary}
                 />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
             {confirmPasswordError && (
               <View style={styles.errorRow}>
                 <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
@@ -494,7 +514,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FONT_SIZE.md,
     color: COLORS.textPrimary,
-    height: '100%',
+    alignSelf: 'stretch',
     paddingVertical: 0,
   },
   eyeIcon: {

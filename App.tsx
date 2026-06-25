@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   NavigationContainer,
   NavigationState,
@@ -94,60 +95,50 @@ function AppInner() {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
 
-  // Lắng nghe trạng thái ứng dụng để phạt điểm khi ở nền quá 60s (Grace Period)
+  // Lắng nghe trạng thái ứng dụng để phạt điểm và bắn thông báo khi chạy nền (bỏ dở)
   useEffect(() => {
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       if (nextAppState === 'background') {
         const session = activeSessionRef.current;
         if (session) {
-          backgroundTimeRef.current = Date.now();
+          // 1. Ghi log abandon
+          logAbandon({
+            timestamp: new Date().toISOString(),
+            date: new Date().toISOString().split('T')[0],
+            subjectId: session.subjectId,
+            taskId: session.taskId,
+            mode: session.mode,
+            timeLeftSeconds: session.timeLeft,
+            elapsedSeconds: session.totalSeconds - session.timeLeft,
+            totalSeconds: session.totalSeconds,
+            reason: 'app_background',
+          });
+
+          // 2. Phạt trừ 5 điểm
+          addPoints({
+            id: `p_${Date.now()}`,
+            date: new Date().toISOString().split('T')[0],
+            points: -5,
+            reason: 'abandon_penalty',
+            description: `Trừ điểm do thoát app khi đang học`,
+          });
+
+          // 3. Hủy phiên học hiện tại
+          setActiveSession(null);
+
+          // Đánh dấu để hiển thị Alert khi mở lại ứng dụng
+          hasAbandonedInBackgroundRef.current = true;
+
+          // Expo Go Android không hỗ trợ push notifications từ SDK 53+.
+          // Alert khi quay lại app vẫn báo rõ phiên bị dừng và trừ điểm.
         }
       } else if (nextAppState === 'active') {
-        const session = activeSessionRef.current;
-        if (backgroundTimeRef.current && session) {
-          const elapsedSeconds = (Date.now() - backgroundTimeRef.current) / 1000;
-          if (elapsedSeconds > 60) {
-            // Quá 60 giây -> Phạt hủy phiên
-            logAbandon({
-              timestamp: new Date().toISOString(),
-              date: new Date().toISOString().split('T')[0],
-              subjectId: session.subjectId,
-              taskId: session.taskId,
-              mode: session.mode,
-              timeLeftSeconds: session.timeLeft,
-              elapsedSeconds: session.totalSeconds - session.timeLeft,
-              totalSeconds: session.totalSeconds,
-              reason: 'app_background',
-            });
-
-            addPoints({
-              id: `p_${Date.now()}`,
-              date: new Date().toISOString().split('T')[0],
-              points: -5,
-              reason: 'abandon_penalty',
-              description: `Trừ điểm do thoát app quá 60 giây khi đang học`,
-            });
-
-            setActiveSession(null);
-            hasAbandonedInBackgroundRef.current = true;
-          } else {
-            // Dưới 60 giây -> Cho phép học tiếp, trừ hao thời gian trôi qua thực tế
-            const elapsed = Math.round(elapsedSeconds);
-            const nextTimeLeft = Math.max(0, session.timeLeft - elapsed);
-            setActiveSession({
-              ...session,
-              timeLeft: nextTimeLeft,
-            });
-          }
-        }
-        backgroundTimeRef.current = null;
-
-        // Hiển thị thông báo nếu bị hủy trong nền
+        // Khi mở lại ứng dụng -> Kiểm tra nếu trước đó bị bỏ dở trong nền thì hiện Alert
         if (hasAbandonedInBackgroundRef.current) {
           hasAbandonedInBackgroundRef.current = false;
           Alert.alert(
             'Phiên tập trung đã dừng',
-            'Bạn rời ứng dụng quá 60 giây khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
+            'Bạn rời ứng dụng khi phiên đang chạy. Phiên này bị tính bỏ dở và trừ 5 điểm.',
             [
               {
                 text: 'Đồng ý',
@@ -194,7 +185,7 @@ function AppInner() {
     if (prevRoute === 'Focus' && activeRoute !== 'Focus' && activeSession !== null) {
       if (!hasLoggedSwitchRef.current) {
         hasLoggedSwitchRef.current = true;
-        
+
         // 1. Ghi log abandon
         logAbandon({
           timestamp: new Date().toISOString(),
@@ -274,7 +265,7 @@ function AppInner() {
         useFocusStore.getState().loadUserProfileFromCloud(session.user.id);
       }
     };
-    
+
     fetchSessionAndRole();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -315,9 +306,9 @@ function AppInner() {
 
   const activeTabs = userRole === 'admin'
     ? [
-        { name: 'Admin', label: 'Quản trị', icon: 'shield-outline' as const, iconActive: 'shield' as const, component: AdminScreen },
-        { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline' as const, iconActive: 'person' as const, component: ProfileScreen },
-      ]
+      { name: 'Admin', label: 'Quản trị', icon: 'shield-outline' as const, iconActive: 'shield' as const, component: AdminScreen },
+      { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline' as const, iconActive: 'person' as const, component: ProfileScreen },
+    ]
     : TAB_CONFIG;
 
   return (
@@ -393,8 +384,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AppInner />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AppInner />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
