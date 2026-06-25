@@ -201,6 +201,23 @@ export const useTaskStore = create<TaskState>()(
             t.id === id ? { ...t, ...updatedFields } : t
           ),
         }));
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            // Chỉ sync các trường có trong schema Supabase
+            const updateData: Record<string, any> = {};
+            if (updatedFields.title !== undefined) updateData.title = updatedFields.title;
+            if (updatedFields.subjectId !== undefined) updateData.subject_id = updatedFields.subjectId;
+            if (updatedFields.dueDate !== undefined) updateData.due_date = updatedFields.dueDate;
+            if (updatedFields.status !== undefined) updateData.status = updatedFields.status;
+            if (updatedFields.completedAt !== undefined) updateData.completed_at = updatedFields.completedAt ?? null;
+            if (Object.keys(updateData).length > 0) {
+              await supabase.from('tasks').update(updateData).eq('id', id);
+            }
+          }
+        } catch (e) {
+          console.error('Error updating task in Supabase:', e);
+        }
       },
       deleteTask: async (id) => {
         set((state) => ({
@@ -251,6 +268,7 @@ interface ScheduleState {
   updateSlot: (id: string, updatedFields: Partial<ScheduleSlot>) => void;
   deleteSlot: (id: string) => void;
   deleteSlotsBySubject: (subjectId: string) => void;
+  loadSlotsFromCloud: (userId: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -258,22 +276,97 @@ export const useScheduleStore = create<ScheduleState>()(
   persist(
     (set) => ({
       slots: [],
-      addSlot: (slot) =>
-        set((state) => ({ slots: [...state.slots, slot] })),
-      updateSlot: (id, updatedFields) =>
+      addSlot: async (slot) => {
+        set((state) => ({ slots: [...state.slots, slot] }));
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('schedule_slots').insert({
+              id: slot.id,
+              user_id: user.id,
+              subject_id: slot.subjectId,
+              day_of_week: slot.dayOfWeek,
+              start_time: slot.startTime,
+              end_time: slot.endTime,
+              room: slot.room ?? null,
+              type: slot.type,
+            });
+          }
+        } catch (e) {
+          console.error('Error adding slot to Supabase:', e);
+        }
+      },
+      updateSlot: async (id, updatedFields) => {
         set((state) => ({
           slots: state.slots.map((s) =>
             s.id === id ? { ...s, ...updatedFields } : s
           ),
-        })),
-      deleteSlot: (id) =>
+        }));
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const updateData: Record<string, any> = {};
+            if (updatedFields.subjectId !== undefined) updateData.subject_id = updatedFields.subjectId;
+            if (updatedFields.dayOfWeek !== undefined) updateData.day_of_week = updatedFields.dayOfWeek;
+            if (updatedFields.startTime !== undefined) updateData.start_time = updatedFields.startTime;
+            if (updatedFields.endTime !== undefined) updateData.end_time = updatedFields.endTime;
+            if ('room' in updatedFields) updateData.room = updatedFields.room ?? null;
+            if (updatedFields.type !== undefined) updateData.type = updatedFields.type;
+            if (Object.keys(updateData).length > 0) {
+              await supabase.from('schedule_slots').update(updateData).eq('id', id);
+            }
+          }
+        } catch (e) {
+          console.error('Error updating slot in Supabase:', e);
+        }
+      },
+      deleteSlot: async (id) => {
         set((state) => ({
           slots: state.slots.filter((s) => s.id !== id),
-        })),
-      deleteSlotsBySubject: (subjectId) =>
+        }));
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('schedule_slots').delete().eq('id', id);
+          }
+        } catch (e) {
+          console.error('Error deleting slot from Supabase:', e);
+        }
+      },
+      deleteSlotsBySubject: async (subjectId) => {
         set((state) => ({
           slots: state.slots.filter((s) => s.subjectId !== subjectId),
-        })),
+        }));
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('schedule_slots').delete().eq('user_id', user.id).eq('subject_id', subjectId);
+          }
+        } catch (e) {
+          console.error('Error deleting slots by subject from Supabase:', e);
+        }
+      },
+      loadSlotsFromCloud: async (userId) => {
+        try {
+          const { data, error } = await supabase
+            .from('schedule_slots')
+            .select('*')
+            .eq('user_id', userId);
+          if (error || !data) return;
+          const slots: ScheduleSlot[] = data.map((row) => ({
+            id: row.id,
+            subjectId: row.subject_id,
+            dayOfWeek: row.day_of_week as ScheduleSlot['dayOfWeek'],
+            startTime: row.start_time,
+            endTime: row.end_time,
+            room: row.room ?? undefined,
+            type: row.type as ScheduleSlot['type'],
+          }));
+          set({ slots });
+        } catch (e) {
+          console.error('Error loading slots from Supabase:', e);
+        }
+      },
       reset: () => set({ slots: [] }),
     }),
     {
@@ -286,6 +379,7 @@ export const useScheduleStore = create<ScheduleState>()(
 // ─── Focus Store ──────────────────────────────────────────────────────────────
 interface OnboardingProgress {
   hasCompletedOnboarding: boolean;
+  hasSeenNewUserGuidePrompt: boolean;
   completedTutorialTabs: string[];
 }
 
@@ -320,6 +414,7 @@ interface FocusState {
   tutorialActiveTab: string | null;
   tutorialActiveStep: number | null;
   hasCompletedOnboarding: boolean;
+  hasSeenNewUserGuidePrompt: boolean;
 
   addSession: (session: FocusSession) => void;
   addPoints: (tx: PointTransaction) => void;
@@ -330,6 +425,7 @@ interface FocusState {
   logAbandon: (log: Omit<AbandonLog, 'id'>) => void;
   setActiveSession: (session: ActivePomodoroSession | null) => void;
   clearOldAbandonLogs: () => void;
+  loadUserProfileFromCloud: (userId: string) => Promise<void>;
   
   // Tutorial Actions
   syncOnboardingForUser: (userId: string | null) => void;
@@ -339,6 +435,8 @@ interface FocusState {
   skipTutorial: () => void;
   completeTutorial: (tabName: string) => void;
   completeOnboarding: () => void;
+  markNewUserGuideSeen: () => void;
+  skipNewUserGuide: () => void;
   resetTutorials: () => void;
   
   reset: () => void;
@@ -364,6 +462,7 @@ export const useFocusStore = create<FocusState>()(
       tutorialActiveTab: null,
       tutorialActiveStep: null,
       hasCompletedOnboarding: false,
+      hasSeenNewUserGuidePrompt: false,
       addSession: async (session) => {
         set((state) => ({ sessions: [session, ...state.sessions] }));
         
@@ -387,11 +486,21 @@ export const useFocusStore = create<FocusState>()(
           console.error('Error adding focus session to Supabase:', e);
         }
       },
-      addPoints: (tx) =>
+      addPoints: (tx) => {
+        const newTotal = Math.max(0, useFocusStore.getState().totalPoints + tx.points);
         set((state) => ({
           points: [tx, ...state.points],
           totalPoints: Math.max(0, state.totalPoints + tx.points),
-        })),
+        }));
+        // Fire-and-forget: đồng bộ điểm lên cloud
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
+            supabase.from('user_profiles')
+              .upsert({ id: user.id, total_points: newTotal, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+              .then(({ error }) => { if (error) console.error('Lỗi sync điểm:', error); });
+          }
+        }).catch(console.error);
+      },
       updateTimerSettings: (pomodoro, shortBreak, longBreak) =>
         set(() => ({
           pomodoroDuration: pomodoro,
@@ -440,7 +549,7 @@ export const useFocusStore = create<FocusState>()(
         const state = get();
         if (state.totalPoints < cost) return false;
         if (state.unlockedMusicIds.includes(id)) return false;
- 
+
         const tx: PointTransaction = {
           id: `p_${Date.now()}`,
           date: new Date().toISOString().split('T')[0],
@@ -448,13 +557,42 @@ export const useFocusStore = create<FocusState>()(
           reason: 'music_unlocked',
           description: `Đổi nhạc: ${name}`,
         };
- 
-        set((state) => ({
-          unlockedMusicIds: [...state.unlockedMusicIds, id],
+
+        const newUnlockedIds = [...state.unlockedMusicIds, id];
+        const newTotal = state.totalPoints - cost;
+
+        set(() => ({
+          unlockedMusicIds: newUnlockedIds,
           points: [tx, ...state.points],
-          totalPoints: state.totalPoints - cost,
+          totalPoints: newTotal,
         }));
+
+        // Fire-and-forget: đồng bộ nhạc mở khóa và điểm lên cloud
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
+            supabase.from('user_profiles')
+              .upsert({ id: user.id, total_points: newTotal, unlocked_music_ids: newUnlockedIds, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+              .then(({ error }) => { if (error) console.error('Lỗi sync nhạc:', error); });
+          }
+        }).catch(console.error);
+
         return true;
+      },
+      loadUserProfileFromCloud: async (userId) => {
+        try {
+          const { data, error } = await supabase
+            .from('user_profiles')
+            .select('total_points, unlocked_music_ids')
+            .eq('id', userId)
+            .single();
+          if (error || !data) return;
+          set({
+            totalPoints: data.total_points,
+            unlockedMusicIds: data.unlocked_music_ids ?? ['m_lofi'],
+          });
+        } catch (e) {
+          console.error('Error loading user profile from Supabase:', e);
+        }
       },
       syncOnboardingForUser: (userId) => {
         const state = get();
@@ -466,11 +604,13 @@ export const useFocusStore = create<FocusState>()(
           ...state.onboardingByUser,
           [currentUserId]: {
             hasCompletedOnboarding: state.hasCompletedOnboarding,
+            hasSeenNewUserGuidePrompt: state.hasSeenNewUserGuidePrompt,
             completedTutorialTabs: state.completedTutorialTabs,
           },
         };
         const nextProgress = onboardingByUser[nextUserId] ?? {
-          hasCompletedOnboarding: false,
+          hasCompletedOnboarding: state.hasCompletedOnboarding,
+          hasSeenNewUserGuidePrompt: false,
           completedTutorialTabs: [],
         };
 
@@ -478,6 +618,7 @@ export const useFocusStore = create<FocusState>()(
           onboardingByUser,
           activeOnboardingUserId: nextUserId,
           hasCompletedOnboarding: nextProgress.hasCompletedOnboarding,
+          hasSeenNewUserGuidePrompt: nextProgress.hasSeenNewUserGuidePrompt,
           completedTutorialTabs: nextProgress.completedTutorialTabs,
           tutorialActiveTab: null,
           tutorialActiveStep: null,
@@ -486,6 +627,14 @@ export const useFocusStore = create<FocusState>()(
       startTutorial: (tabName) => {
         const state = get();
         if (state.completedTutorialTabs.includes(tabName)) return;
+        // Tab không có tutorial → đánh dấu hoàn thành ngay lập tức
+        const noTutorialTabs = ['Stats'];
+        if (noTutorialTabs.includes(tabName)) {
+          set((s) => ({
+            completedTutorialTabs: [...s.completedTutorialTabs, tabName],
+          }));
+          return;
+        }
         set({ tutorialActiveTab: tabName, tutorialActiveStep: 1 });
       },
       nextTutorialStep: () => {
@@ -535,20 +684,29 @@ export const useFocusStore = create<FocusState>()(
         }));
       },
       completeOnboarding: () => set({ hasCompletedOnboarding: true }),
+      markNewUserGuideSeen: () => set({ hasSeenNewUserGuidePrompt: true }),
+      skipNewUserGuide: () => set({
+        hasSeenNewUserGuidePrompt: true,
+        completedTutorialTabs: ['Today', 'Timetable', 'Tasks', 'Focus', 'Stats', 'Profile'],
+        tutorialActiveTab: null,
+        tutorialActiveStep: null,
+      }),
       resetTutorials: () => set((state) => ({
         completedTutorialTabs: [],
         tutorialActiveTab: null,
         tutorialActiveStep: null,
         hasCompletedOnboarding: false,
+        hasSeenNewUserGuidePrompt: false,
         onboardingByUser: {
           ...state.onboardingByUser,
           [state.activeOnboardingUserId ?? GUEST_ONBOARDING_USER_ID]: {
             hasCompletedOnboarding: false,
+            hasSeenNewUserGuidePrompt: false,
             completedTutorialTabs: [],
           },
         },
       })),
-      reset: () => set({ sessions: [], points: [], totalPoints: 130, activeSubjectId: null, activeTaskId: null, unlockedMusicIds: ['m_lofi'], abandonLogs: [], activeSession: null, onboardingByUser: {}, activeOnboardingUserId: GUEST_ONBOARDING_USER_ID, completedTutorialTabs: [], tutorialActiveTab: null, tutorialActiveStep: null, hasCompletedOnboarding: false }),
+      reset: () => set({ sessions: [], points: [], totalPoints: 130, activeSubjectId: null, activeTaskId: null, unlockedMusicIds: ['m_lofi'], abandonLogs: [], activeSession: null, onboardingByUser: {}, activeOnboardingUserId: GUEST_ONBOARDING_USER_ID, completedTutorialTabs: [], tutorialActiveTab: null, tutorialActiveStep: null, hasCompletedOnboarding: false, hasSeenNewUserGuidePrompt: false }),
     }),
     {
       name: 'studycommit-focus',

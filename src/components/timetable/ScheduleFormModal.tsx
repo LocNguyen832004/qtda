@@ -10,9 +10,13 @@ import {
 } from 'react-native';
 import { ModalContainer } from '../ui/ModalContainer';
 import { ScheduleSlot, DayOfWeek, Subject, SubjectColor } from '../../types';
-import { useScheduleStore, useSubjectStore } from '../../store';
-import { COLORS, FONT_SIZE, FONT_WEIGHT, RADIUS, SPACING } from '../../utils/theme';
+import { useScheduleStore, useSubjectStore, useFocusStore } from '../../store';
+import { COLORS, FONT_SIZE, FONT_WEIGHT, RADIUS, SPACING, SHADOW } from '../../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { TutorialTooltip } from '../ui/TutorialTooltip';
+
+type WizardStep = 1 | 2 | 3;
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const SUBJECT_COLOR_SWATCHES: SubjectColor[] = [
   '#6C63FF',
@@ -30,23 +34,29 @@ interface ScheduleFormModalProps {
   defaultDay?: DayOfWeek;
 }
 
-const DAYS: { key: DayOfWeek; label: string }[] = [
-  { key: 1, label: 'T2' },
-  { key: 2, label: 'T3' },
-  { key: 3, label: 'T4' },
-  { key: 4, label: 'T5' },
-  { key: 5, label: 'T6' },
-  { key: 6, label: 'T7' },
-  { key: 0, label: 'CN' },
+const DAYS: { key: DayOfWeek; label: string; fullLabel: string }[] = [
+  { key: 1, label: 'T2', fullLabel: 'Thứ 2' },
+  { key: 2, label: 'T3', fullLabel: 'Thứ 3' },
+  { key: 3, label: 'T4', fullLabel: 'Thứ 4' },
+  { key: 4, label: 'T5', fullLabel: 'Thứ 5' },
+  { key: 5, label: 'T6', fullLabel: 'Thứ 6' },
+  { key: 6, label: 'T7', fullLabel: 'Thứ 7' },
+  { key: 0, label: 'CN', fullLabel: 'Chủ nhật' },
 ];
 
-const TYPES: { key: ScheduleSlot['type']; label: string; color: string }[] = [
-  { key: 'lecture', label: 'Lý thuyết', color: COLORS.primary },
-  { key: 'lab', label: 'Thực hành', color: COLORS.secondary },
-  { key: 'tutorial', label: 'Bài tập', color: COLORS.accent },
-  { key: 'self_study', label: 'Tự học', color: COLORS.success },
-  { key: 'group_study', label: 'Học nhóm', color: '#8B85FF' },
+const TYPES: { key: ScheduleSlot['type']; label: string; color: string; icon: IconName }[] = [
+  { key: 'lecture', label: 'Lý thuyết', color: COLORS.primary, icon: 'school-outline' },
+  { key: 'lab', label: 'Thực hành', color: COLORS.secondary, icon: 'flask-outline' },
+  { key: 'tutorial', label: 'Bài tập', color: COLORS.accent, icon: 'create-outline' },
+  { key: 'self_study', label: 'Tự học', color: COLORS.success, icon: 'book-outline' },
+  { key: 'group_study', label: 'Học nhóm', color: '#8B85FF', icon: 'people-outline' },
 ];
+
+const STEP_META: Record<WizardStep, { title: string; hint: string }> = {
+  1: { title: 'Chọn môn học', hint: 'Chọn môn có sẵn hoặc tạo môn mới.' },
+  2: { title: 'Thời gian & địa điểm', hint: 'Chọn thứ, giờ học và nơi học.' },
+  3: { title: 'Loại tiết học', hint: 'Chọn kiểu buổi học rồi lưu.' },
+};
 
 export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
   visible,
@@ -56,7 +66,9 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
 }) => {
   const { addSlot, updateSlot, deleteSlot } = useScheduleStore();
   const { subjects, addSubject } = useSubjectStore();
+  const { tutorialActiveTab } = useFocusStore();
 
+  const [step, setStep] = useState<WizardStep>(1);
   const [subjectId, setSubjectId] = useState(subjects[0]?.id ?? '');
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>(defaultDay);
   const [startTime, setStartTime] = useState('07:30');
@@ -64,14 +76,15 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
   const [room, setRoom] = useState('');
   const [type, setType] = useState<ScheduleSlot['type']>('lecture');
 
-  // Inline subject creation
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectShort, setNewSubjectShort] = useState('');
   const [newSubjectColor, setNewSubjectColor] = useState<SubjectColor | string>('#6C63FF');
+  const [newSubjectTargetHours, setNewSubjectTargetHours] = useState('');
 
   useEffect(() => {
     if (visible) {
+      setStep(1);
       if (slotToEdit) {
         setSubjectId(slotToEdit.subjectId);
         setDayOfWeek(slotToEdit.dayOfWeek);
@@ -91,18 +104,41 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
       setNewSubjectName('');
       setNewSubjectShort('');
       setNewSubjectColor('#6C63FF');
+      setNewSubjectTargetHours('');
     }
-  }, [visible, slotToEdit, defaultDay, subjects]);
+  }, [visible, slotToEdit, defaultDay]);
+
+  const selectedSubject = subjects.find((sub) => sub.id === subjectId);
+  const selectedDay = DAYS.find((day) => day.key === dayOfWeek);
+
+  const validateTime = () => {
+    const timeReg = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeReg.test(startTime) || !timeReg.test(endTime)) {
+      Alert.alert('Kiểm tra lại giờ học', 'Nhập theo dạng 07:30 hoặc 13:45.');
+      return false;
+    }
+
+    if (startTime.localeCompare(endTime) >= 0) {
+      Alert.alert('Kiểm tra lại giờ học', 'Giờ kết thúc cần sau giờ bắt đầu.');
+      return false;
+    }
+
+    return true;
+  };
 
   const handleCreateSubject = () => {
     if (!newSubjectName.trim()) {
-      Alert.alert('Lỗi', 'Vui lòng nhập tên chủ đề');
+      Alert.alert('Thiếu tên môn', 'Nhập tên môn học trước nhé.');
       return;
     }
     if (!newSubjectShort.trim()) {
-      Alert.alert('Lỗi', 'Vui lòng nhập tên viết tắt');
+      Alert.alert('Thiếu viết tắt', 'Nhập tên viết tắt để dễ nhận diện.');
       return;
     }
+
+    const parsedTargetHours = newSubjectTargetHours ? parseFloat(newSubjectTargetHours) : 5;
+    const targetHoursNum = isNaN(parsedTargetHours) ? 5 : parsedTargetHours;
+
     const newId = `s_${Date.now()}`;
     const newSubject: Subject = {
       id: newId,
@@ -110,394 +146,486 @@ export const ScheduleFormModal: React.FC<ScheduleFormModalProps> = ({
       shortName: newSubjectShort.trim().toUpperCase(),
       studiedHours: 0,
       color: newSubjectColor as SubjectColor,
+      targetHours: targetHoursNum,
     };
+
     addSubject(newSubject);
     setSubjectId(newId);
     setShowSubjectForm(false);
     setNewSubjectName('');
     setNewSubjectShort('');
     setNewSubjectColor('#6C63FF');
+    setNewSubjectTargetHours('5');
+  };
+
+  const handleNext = () => {
+    if (step === 1) {
+      if (!subjectId) {
+        Alert.alert('Chọn môn học', 'Chọn một môn hoặc tạo môn mới.');
+        return;
+      }
+      setStep(2);
+      return;
+    }
+
+    if (step === 2) {
+      if (!validateTime()) return;
+      setStep(3);
+      return;
+    }
+
+    handleSubmit();
+  };
+
+  const handleBack = () => {
+    setStep((current) => (current > 1 ? ((current - 1) as WizardStep) : current));
   };
 
   const handleSubmit = () => {
     if (!subjectId) {
-      Alert.alert('Lỗi', 'Vui lòng chọn môn học. Hãy tạo môn học trước.');
+      Alert.alert('Chọn môn học', 'Chọn một môn hoặc tạo môn mới.');
       return;
     }
-    // Time regex validation
-    const timeReg = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeReg.test(startTime) || !timeReg.test(endTime)) {
-      Alert.alert('Lỗi', 'Thời gian học phải đúng định dạng HH:MM (Ví dụ: 07:30)');
-      return;
-    }
+    if (!validateTime()) return;
 
-    if (startTime.localeCompare(endTime) >= 0) {
-      Alert.alert('Lỗi', 'Thời gian kết thúc phải sau thời gian bắt đầu');
-      return;
-    }
+    const payload = {
+      subjectId,
+      dayOfWeek,
+      startTime,
+      endTime,
+      room: room.trim() || undefined,
+      type,
+    };
 
     if (slotToEdit) {
-      updateSlot(slotToEdit.id, {
-        subjectId,
-        dayOfWeek,
-        startTime,
-        endTime,
-        room: room.trim() || undefined,
-        type,
-      });
+      updateSlot(slotToEdit.id, payload);
     } else {
-      const newSlot: ScheduleSlot = {
+      addSlot({
         id: `sc_${Date.now()}`,
-        subjectId,
-        dayOfWeek,
-        startTime,
-        endTime,
-        room: room.trim() || undefined,
-        type,
-      };
-      addSlot(newSlot);
+        ...payload,
+      });
+
+      const store = useFocusStore.getState();
+      if (store.tutorialActiveTab === 'Timetable') {
+        Alert.alert(
+          'Chúc mừng! 🎉',
+          'Bạn đã tạo lịch học đầu tiên thành công! Tiếp theo hãy lên kế hoạch công việc cho môn học này nhé.',
+          [
+            {
+              text: 'Tiếp tục',
+              onPress: () => {
+                onClose();
+                store.completeTutorial('Timetable');
+              },
+            },
+          ]
+        );
+        return;
+      }
     }
     onClose();
   };
 
   const handleDelete = () => {
-    if (slotToEdit) {
-      Alert.alert('Xóa lịch học', 'Bạn có chắc chắn muốn xóa tiết học này khỏi thời khóa biểu?', [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: () => {
-            deleteSlot(slotToEdit.id);
-            onClose();
-          },
+    if (!slotToEdit) return;
+
+    Alert.alert('Xóa lịch học', 'Bạn muốn xóa tiết học này?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: () => {
+          deleteSlot(slotToEdit.id);
+          onClose();
         },
-      ]);
-    }
+      },
+    ]);
   };
+
+  const renderStepHeader = () => (
+    <View style={styles.stepHeader}>
+      <View style={styles.progressRow}>
+        {([1, 2, 3] as WizardStep[]).map((item) => {
+          const isActive = item === step;
+          const isDone = item < step;
+          return (
+            <View key={item} style={styles.progressItem}>
+              <View style={[styles.progressDot, (isActive || isDone) && styles.progressDotActive]}>
+                <Text style={[styles.progressDotText, (isActive || isDone) && styles.progressDotTextActive]}>
+                  {isDone ? '✓' : item}
+                </Text>
+              </View>
+              {item < 3 && <View style={[styles.progressLine, isDone && styles.progressLineActive]} />}
+            </View>
+          );
+        })}
+      </View>
+      <Text style={styles.stepTitle}>{STEP_META[step].title}</Text>
+      <Text style={styles.stepHint}>{STEP_META[step].hint}</Text>
+    </View>
+  );
+
+  const renderSubjectStep = () => (
+    <View style={styles.stepContent}>
+      <TouchableOpacity
+        style={[styles.addSubjectCard, showSubjectForm && styles.addSubjectCardActive]}
+        onPress={() => setShowSubjectForm((value) => !value)}
+        activeOpacity={0.84}
+      >
+        <View style={styles.addSubjectIcon}>
+          <Ionicons name={showSubjectForm ? 'close' : 'add'} size={22} color={COLORS.primary} />
+        </View>
+        <View style={styles.addSubjectTextWrap}>
+          <Text style={styles.addSubjectTitle}>{showSubjectForm ? 'Đóng form thêm môn' : 'Thêm môn học mới'}</Text>
+          <Text style={styles.addSubjectDesc}>Dùng khi môn chưa có trong danh sách.</Text>
+        </View>
+      </TouchableOpacity>
+
+      {showSubjectForm && (
+        <View style={styles.subjectFormCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Tên môn học"
+            placeholderTextColor={COLORS.textMuted}
+            value={newSubjectName}
+            onChangeText={setNewSubjectName}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Viết tắt"
+            placeholderTextColor={COLORS.textMuted}
+            autoCapitalize="characters"
+            maxLength={6}
+            value={newSubjectShort}
+            onChangeText={setNewSubjectShort}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Mục tiêu tự học hằng tuần (vd: 6 giờ)"
+            placeholderTextColor={COLORS.textMuted}
+            keyboardType="numeric"
+            value={newSubjectTargetHours}
+            onChangeText={setNewSubjectTargetHours}
+          />
+          <View style={styles.colorRow}>
+            {SUBJECT_COLOR_SWATCHES.map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.colorCircle,
+                  { backgroundColor: color },
+                  newSubjectColor === color && styles.colorCircleSelected,
+                ]}
+                onPress={() => setNewSubjectColor(color)}
+                activeOpacity={0.8}
+              >
+                {newSubjectColor === color && <View style={styles.colorInner} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.createSubjectButton} onPress={handleCreateSubject} activeOpacity={0.84}>
+            <Ionicons name="checkmark" size={18} color="#fff" />
+            <Text style={styles.createSubjectText}>Tạo và chọn môn này</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <Text style={styles.sectionLabel}>Môn đã có</Text>
+      <View style={styles.subjectGrid}>
+        {subjects.map((subject) => {
+          const isSelected = subjectId === subject.id;
+          return (
+            <TouchableOpacity
+              key={subject.id}
+              style={[styles.subjectCard, isSelected && { borderColor: subject.color, backgroundColor: subject.color + '12' }]}
+              onPress={() => setSubjectId(subject.id)}
+              activeOpacity={0.84}
+            >
+              <View style={[styles.subjectInitials, { backgroundColor: subject.color }]}> 
+                <Text style={styles.subjectInitialsText}>{subject.shortName}</Text>
+              </View>
+              <View style={styles.subjectInfo}>
+                <Text style={styles.subjectName} numberOfLines={1}>{subject.name}</Text>
+                <Text style={styles.subjectMeta}>{subject.shortName}</Text>
+              </View>
+              {isSelected && <Ionicons name="checkmark-circle" size={22} color={subject.color} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  const renderTimeStep = () => (
+    <View style={styles.stepContent}>
+      <Text style={styles.sectionLabel}>Chọn thứ</Text>
+      <View style={styles.daysRow}>
+        {DAYS.map((day) => {
+          const isSelected = dayOfWeek === day.key;
+          return (
+            <TouchableOpacity
+              key={day.key}
+              style={[styles.dayButton, isSelected && styles.dayButtonActive]}
+              onPress={() => setDayOfWeek(day.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.dayText, isSelected && styles.dayTextActive]}>{day.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={styles.timeRow}>
+        <View style={styles.timeInputGroup}>
+          <Text style={styles.label}>Bắt đầu</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="07:30"
+            placeholderTextColor={COLORS.textMuted}
+            value={startTime}
+            onChangeText={setStartTime}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+        <View style={styles.timeInputGroup}>
+          <Text style={styles.label}>Kết thúc</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="09:10"
+            placeholderTextColor={COLORS.textMuted}
+            value={endTime}
+            onChangeText={setEndTime}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Địa điểm</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="VD: A1-301, thư viện"
+          placeholderTextColor={COLORS.textMuted}
+          value={room}
+          onChangeText={setRoom}
+        />
+      </View>
+    </View>
+  );
+
+  const renderTypeStep = () => (
+    <View style={styles.stepContent}>
+      <View style={styles.summaryCard}>
+        <Text style={styles.summaryLabel}>Lịch học</Text>
+        <Text style={styles.summaryTitle}>{selectedSubject?.name ?? 'Chưa chọn môn'}</Text>
+        <Text style={styles.summaryMeta}>
+          {selectedDay?.fullLabel} • {startTime}-{endTime}{room.trim() ? ` • ${room.trim()}` : ''}
+        </Text>
+      </View>
+
+      <View style={styles.typeList}>
+        {TYPES.map((item) => {
+          const isSelected = type === item.key;
+          return (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.typeCard, isSelected && { borderColor: item.color, backgroundColor: item.color + '12' }]}
+              onPress={() => setType(item.key)}
+              activeOpacity={0.84}
+            >
+              <View style={[styles.typeIcon, { backgroundColor: item.color + '20' }]}> 
+                <Ionicons name={item.icon} size={20} color={item.color} />
+              </View>
+              <Text style={styles.typeLabel}>{item.label}</Text>
+              {isSelected && <Ionicons name="checkmark-circle" size={22} color={item.color} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
 
   return (
     <ModalContainer
       visible={visible}
       onClose={onClose}
-      title={slotToEdit ? 'Chi tiết lịch học' : 'Thêm lịch học'}
+      title={slotToEdit ? 'Sửa lịch học' : 'Thêm lịch học'}
+      fullScreen={true}
     >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.form}>
-        {/* Chọn môn học */}
-        <View style={styles.inputGroup}>
-          <View style={styles.subjectLabelRow}>
-            <Text style={styles.label}>Môn học *</Text>
-            <TouchableOpacity
-              style={styles.btnAddSubjectInline}
-              onPress={() => setShowSubjectForm(!showSubjectForm)}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={showSubjectForm ? 'close-circle-outline' : 'add-circle-outline'}
-                size={15}
-                color={COLORS.primary}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.form}>
+        {tutorialActiveTab === 'Timetable' ? (
+          <View style={{ marginBottom: 12 }}>
+            {step === 1 && (
+              <TutorialTooltip
+                step={1}
+                totalSteps={3}
+                title="Chọn môn học"
+                description="Hãy chọn một môn học có sẵn trong danh sách (hoặc tạo môn mới ở trên), sau đó bấm Tiếp tục."
+                hideNext={true}
+                onSkip={() => useFocusStore.getState().skipTutorial()}
               />
-              <Text style={styles.btnAddSubjectInlineText}>
-                {showSubjectForm ? 'Hủy' : 'Thêm môn'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Danh sách chủ đề có sẵn */}
-          {subjects.length === 0 && !showSubjectForm ? (
-            <TouchableOpacity
-              style={styles.emptySubjectHint}
-              onPress={() => setShowSubjectForm(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="folder-open-outline" size={20} color={COLORS.textMuted} />
-              <Text style={styles.emptySubjectHintText}>Chưa có chủ đề nào. Nhấn để tạo ngay!</Text>
-            </TouchableOpacity>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectList}>
-              {subjects.map((sub) => {
-                const isSelected = subjectId === sub.id;
-                return (
-                  <TouchableOpacity
-                    key={sub.id}
-                    style={[
-                      styles.subjectChip,
-                      isSelected && { backgroundColor: sub.color, borderColor: sub.color },
-                    ]}
-                    onPress={() => setSubjectId(sub.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.subjectDot, { backgroundColor: isSelected ? '#fff' : sub.color }]} />
-                    <Text style={[styles.subjectChipText, isSelected && { color: '#fff' }]}>
-                      {sub.shortName}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
-
-          {/* Inline subject creation form */}
-          {showSubjectForm && (
-            <View style={styles.inlineSubjectForm}>
-              <View style={styles.inlineSubjectHeader}>
-                <Ionicons name="sparkles-outline" size={14} color={COLORS.primary} />
-              <Text style={styles.inlineSubjectTitle}>Tạo môn học mới</Text>
-              </View>
-              <TextInput
-                style={styles.inlineInput}
-                placeholder="Tên môn học (vd: Giải tích, Tiếng Anh)"
-                placeholderTextColor={COLORS.textMuted}
-                value={newSubjectName}
-                onChangeText={setNewSubjectName}
+            )}
+            {step === 2 && (
+              <TutorialTooltip
+                step={2}
+                totalSteps={3}
+                title="Thời gian học"
+                description="Thiết lập thứ học, giờ học và địa điểm học tập của bạn, sau đó bấm Tiếp tục."
+                hideNext={true}
+                onSkip={() => useFocusStore.getState().skipTutorial()}
               />
-              <TextInput
-                style={styles.inlineInput}
-                placeholder="Viết tắt (tối đa 6 ký tự)"
-                placeholderTextColor={COLORS.textMuted}
-                autoCapitalize="characters"
-                maxLength={6}
-                value={newSubjectShort}
-                onChangeText={setNewSubjectShort}
+            )}
+            {step === 3 && (
+              <TutorialTooltip
+                step={3}
+                totalSteps={3}
+                title="Loại tiết học"
+                description="Chọn kiểu học tập phù hợp và bấm Lưu lịch học để hoàn tất."
+                hideNext={true}
+                onSkip={() => useFocusStore.getState().skipTutorial()}
               />
-              <View style={styles.inlineColorRow}>
-                {SUBJECT_COLOR_SWATCHES.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[
-                      styles.inlineColorCircle,
-                      { backgroundColor: c },
-                      newSubjectColor === c && styles.inlineColorCircleSelected,
-                    ]}
-                    onPress={() => setNewSubjectColor(c)}
-                    activeOpacity={0.8}
-                  >
-                    {newSubjectColor === c && <View style={styles.inlineColorInner} />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <TouchableOpacity
-                style={styles.btnCreateSubject}
-                onPress={handleCreateSubject}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark" size={16} color="#fff" />
-                <Text style={styles.btnCreateSubjectText}>Tạo & chọn môn này</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Chọn thứ */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Thứ trong tuần *</Text>
-          <View style={styles.daysRow}>
-            {DAYS.map((d) => {
-              const isSelected = dayOfWeek === d.key;
-              return (
-                <TouchableOpacity
-                  key={d.key}
-                  style={[styles.dayBtn, isSelected && styles.dayBtnSelected]}
-                  onPress={() => setDayOfWeek(d.key)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>
-                    {d.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            )}
           </View>
-        </View>
+        ) : (
+          renderStepHeader()
+        )}
+        {step === 1 && renderSubjectStep()}
+        {step === 2 && renderTimeStep()}
+        {step === 3 && renderTypeStep()}
 
-        {/* Thời gian học */}
-        <View style={styles.row}>
-          <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={styles.label}>Giờ bắt đầu *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="07:30"
-              placeholderTextColor={COLORS.textMuted}
-              value={startTime}
-              onChangeText={setStartTime}
-            />
-          </View>
-          <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={styles.label}>Giờ kết thúc *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="09:10"
-              placeholderTextColor={COLORS.textMuted}
-              value={endTime}
-              onChangeText={setEndTime}
-            />
-          </View>
-        </View>
-        <Text style={styles.helperText}>Nhập giờ theo mẫu 24 giờ, ví dụ 07:30 hoặc 13:45.</Text>
-
-        {/* Phòng học */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Phòng học / Địa điểm</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Ví dụ: A1-301, Lab IT-01, Thư viện"
-            placeholderTextColor={COLORS.textMuted}
-            value={room}
-            onChangeText={setRoom}
-          />
-        </View>
-
-        {/* Loại tiết học */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Loại tiết học</Text>
-          <View style={styles.typeGrid}>
-            {TYPES.map((t) => {
-              const isSelected = type === t.key;
-              return (
-                <TouchableOpacity
-                  key={t.key}
-                  style={[
-                    styles.typeBtn,
-                    isSelected && { backgroundColor: t.color, borderColor: t.color },
-                  ]}
-                  onPress={() => setType(t.key)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.typeBtnText, isSelected && { color: '#fff' }]}>
-                    {t.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Buttons */}
-        <View style={styles.actionRow}>
-          {slotToEdit && (
-            <TouchableOpacity style={styles.btnDelete} onPress={handleDelete} activeOpacity={0.8}>
-              <Text style={styles.btnDeleteText}>Xóa</Text>
+        <View style={styles.footer}>
+          {step > 1 && (
+            <TouchableOpacity style={styles.backButton} onPress={handleBack} activeOpacity={0.8}>
+              <Ionicons name="arrow-back" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.backButtonText}>Quay lại</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={[styles.btnSubmit, slotToEdit ? { flex: 2 } : { flex: 1 }]}
-            onPress={handleSubmit}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.btnText}>Lưu</Text>
+          <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.84}>
+            <Text style={styles.nextButtonText}>{step === 3 ? 'Lưu lịch học' : 'Tiếp tục'}</Text>
+            <Ionicons name={step === 3 ? 'checkmark' : 'arrow-forward'} size={17} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {slotToEdit && (
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} activeOpacity={0.8}>
+            <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
+            <Text style={styles.deleteButtonText}>Xóa lịch học</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </ModalContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  subjectLabelRow: {
+  form: {
+    gap: SPACING.md,
+    paddingBottom: 20,
+  },
+  stepHeader: {
+    gap: 6,
+    paddingBottom: SPACING.sm,
+  },
+  progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
   },
-  btnAddSubjectInline: {
+  progressItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.primary + '15',
-  },
-  btnAddSubjectInlineText: {
-    fontSize: FONT_SIZE.xs,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHT.semibold,
-  },
-  emptySubjectHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: RADIUS.md,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-  },
-  emptySubjectHintText: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textMuted,
     flex: 1,
   },
-  inlineSubjectForm: {
-    marginTop: 8,
-    padding: 12,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primary + '08',
-    borderWidth: 1.5,
-    borderColor: COLORS.primary + '30',
-    gap: 8,
-  },
-  inlineSubjectHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 2,
-  },
-  inlineSubjectTitle: {
-    fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.primary,
-  },
-  inlineInput: {
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textPrimary,
-    backgroundColor: COLORS.background,
-  },
-  inlineColorRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 2,
-  },
-  inlineColorCircle: {
+  progressDot: {
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: COLORS.borderLight,
   },
-  inlineColorCircleSelected: {
-    borderWidth: 2.5,
-    borderColor: COLORS.textPrimary,
+  progressDotActive: {
+    backgroundColor: COLORS.primary,
   },
-  inlineColorInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
+  progressDotText: {
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textMuted,
   },
-  btnCreateSubject: {
+  progressDotTextActive: {
+    color: '#fff',
+  },
+  progressLine: {
+    flex: 1,
+    height: 2,
+    marginHorizontal: 6,
+    borderRadius: 1,
+    backgroundColor: COLORS.border,
+  },
+  progressLineActive: {
+    backgroundColor: COLORS.primary,
+  },
+  stepTitle: {
+    fontSize: FONT_SIZE.xl,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textPrimary,
+  },
+  stepHint: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 19,
+  },
+  stepContent: {
+    gap: SPACING.md,
+  },
+  sectionLabel: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textPrimary,
+  },
+  addSubjectCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: COLORS.primary,
+    gap: SPACING.md,
+    padding: SPACING.md,
     borderRadius: RADIUS.md,
-    paddingVertical: 10,
-    marginTop: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary + '35',
+    backgroundColor: COLORS.primary + '10',
   },
-  btnCreateSubjectText: {
-    color: '#fff',
+  addSubjectCardActive: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+  },
+  addSubjectIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOW.sm,
+  },
+  addSubjectTextWrap: {
+    flex: 1,
+  },
+  addSubjectTitle: {
+    fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.bold,
-    fontSize: FONT_SIZE.sm,
+    color: COLORS.primary,
   },
-  form: {
-    gap: 12,
-    paddingBottom: 20,
+  addSubjectDesc: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  subjectFormCard: {
+    gap: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   inputGroup: {
     gap: 6,
@@ -507,124 +635,228 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.semibold,
     color: COLORS.textSecondary,
   },
-  helperText: {
-    fontSize: FONT_SIZE.xs,
-    color: COLORS.textMuted,
-    lineHeight: 16,
-    marginTop: -6,
-  },
   input: {
     borderWidth: 1.5,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
     fontSize: FONT_SIZE.md,
     color: COLORS.textPrimary,
     backgroundColor: COLORS.background,
   },
-  row: {
+  colorRow: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 2,
   },
-  subjectList: {
-    gap: 8,
-    paddingBottom: 4,
+  colorCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  subjectChip: {
+  colorCircleSelected: {
+    borderWidth: 2.5,
+    borderColor: COLORS.textPrimary,
+  },
+  colorInner: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#fff',
+  },
+  createSubjectButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.full,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary,
+    marginTop: 2,
+  },
+  createSubjectText: {
+    color: '#fff',
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  subjectGrid: {
+    gap: SPACING.sm,
+  },
+  subjectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: 12,
+    borderRadius: RADIUS.md,
     borderWidth: 1.5,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
-  subjectDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  subjectInitials: {
+    width: 42,
+    height: 42,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  subjectChipText: {
-    fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.semibold,
-    color: COLORS.textSecondary,
+  subjectInitialsText: {
+    color: '#fff',
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  subjectInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  subjectName: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textPrimary,
+  },
+  subjectMeta: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textMuted,
+    marginTop: 2,
   },
   daysRow: {
     flexDirection: 'row',
     gap: 6,
   },
-  dayBtn: {
+  dayButton: {
     flex: 1,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.md,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.sm,
-    paddingVertical: 8,
-    alignItems: 'center',
     backgroundColor: COLORS.surface,
   },
-  dayBtnSelected: {
-    backgroundColor: COLORS.primary,
+  dayButtonActive: {
     borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
   },
   dayText: {
     fontSize: FONT_SIZE.xs,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.textSecondary,
   },
-  dayTextSelected: {
+  dayTextActive: {
     color: '#fff',
   },
-  typeGrid: {
+  timeRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: SPACING.sm,
   },
-  typeBtn: {
+  timeInputGroup: {
     flex: 1,
-    minWidth: '45%',
+    gap: 6,
+  },
+  summaryCard: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  summaryLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textMuted,
+    marginBottom: 4,
+  },
+  summaryTitle: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textPrimary,
+  },
+  summaryMeta: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  typeList: {
+    gap: SPACING.sm,
+  },
+  typeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: 13,
+    borderRadius: RADIUS.md,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    paddingVertical: 10,
-    alignItems: 'center',
     backgroundColor: COLORS.surface,
   },
-  typeBtnText: {
+  typeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeLabel: {
+    flex: 1,
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textPrimary,
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    minHeight: 50,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  backButtonText: {
     fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.semibold,
+    fontWeight: FONT_WEIGHT.bold,
     color: COLORS.textSecondary,
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  btnSubmit: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  btnText: {
-    color: '#fff',
-    fontWeight: FONT_WEIGHT.bold,
-    fontSize: FONT_SIZE.md,
-  },
-  btnDelete: {
+  nextButton: {
     flex: 1,
-    backgroundColor: COLORS.danger + '15',
-    borderWidth: 1.5,
-    borderColor: COLORS.danger,
-    borderRadius: RADIUS.md,
-    paddingVertical: 14,
+    minHeight: 50,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary,
+    ...SHADOW.md,
   },
-  btnDeleteText: {
-    color: COLORS.danger,
-    fontWeight: FONT_WEIGHT.bold,
+  nextButtonText: {
+    color: '#fff',
     fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.danger + '12',
+    borderWidth: 1,
+    borderColor: COLORS.danger + '35',
+  },
+  deleteButtonText: {
+    color: COLORS.danger,
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
   },
 });

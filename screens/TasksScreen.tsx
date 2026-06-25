@@ -29,7 +29,7 @@ export default function TasksScreen() {
   const { tutorialActiveTab, tutorialActiveStep } = useFocusStore();
   const [activeStatus, setActiveStatus] = useState<TaskStatus | 'all'>('all');
   const [activeSubject, setActiveSubject] = useState<string>('all');
-  
+
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<StudyTask | undefined>(undefined);
 
@@ -37,23 +37,25 @@ export default function TasksScreen() {
   const [subjectModalMode, setSubjectModalMode] = useState<'manager' | 'form'>('manager');
   const [selectedSubject, setSelectedSubject] = useState<Subject | undefined>(undefined);
 
+  const doneCount = tasks.filter((task) => task.status === 'done').length;
+
   const filtered = useMemo(() => {
     return tasks
-      .filter((t) => activeStatus === 'all' || t.status === activeStatus)
-      .filter((t) => activeSubject === 'all' || t.subjectId === activeSubject)
+      .filter((task) => activeStatus === 'all' || task.status === activeStatus)
+      .filter((task) => activeSubject === 'all' || task.subjectId === activeSubject)
       .sort((a, b) => {
         if (a.status === 'done' && b.status !== 'done') return 1;
         if (a.status !== 'done' && b.status === 'done') return -1;
-        const pOrder = { high: 0, medium: 1, low: 2 };
-        return pOrder[a.priority] - pOrder[b.priority];
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
       });
   }, [tasks, activeStatus, activeSubject]);
 
   const counts: Record<string, number> = {
     all: tasks.length,
-    todo: tasks.filter((t) => t.status === 'todo').length,
-    in_progress: tasks.filter((t) => t.status === 'in_progress').length,
-    done: tasks.filter((t) => t.status === 'done').length,
+    todo: tasks.filter((task) => task.status === 'todo').length,
+    in_progress: tasks.filter((task) => task.status === 'in_progress').length,
+    done: doneCount,
   };
 
   const handleOpenAdd = () => {
@@ -61,104 +63,110 @@ export default function TasksScreen() {
     setModalVisible(true);
   };
 
-  const handleOpenEdit = (task: StudyTask) => {
-    setSelectedTask(task);
-    setModalVisible(true);
-  };
+
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={styles.headerCopy}>
           <Text style={styles.title}>Công việc</Text>
-          <TouchableOpacity
-            style={styles.btnManageSubjects}
-            onPress={() => setSubjectsVisible(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="folder-open-outline" size={15} color={COLORS.primary} />
-            <Text style={styles.manageSubjectsText}>Chủ đề</Text>
-          </TouchableOpacity>
         </View>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{tasks.filter(t => t.status !== 'done').length} việc cần làm</Text>
-        </View>
+        <TouchableOpacity style={styles.headerAddButton} onPress={handleOpenAdd} activeOpacity={0.84}>
+          <Ionicons name="add" size={19} color="#fff" />
+          <Text style={styles.headerAddText}>Tạo việc</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Status filter tabs */}
-      <View style={[
-        styles.tabContainer,
-        (tutorialActiveTab === 'Tasks' && tutorialActiveStep === 2) && { zIndex: 1001, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, ...SHADOW.lg }
-      ]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow} contentContainerStyle={styles.tabContent}>
-          {STATUS_TABS.map((tab) => (
+      <View style={styles.filterPanel}>
+        <View style={styles.filterPanelHeader}>
+          <View>
+            <Text style={styles.filterTitle}>Bộ lọc</Text>
+          </View>
+          {(activeStatus !== 'all' || activeSubject !== 'all') && (
             <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, activeStatus === tab.key && styles.tabActive]}
-              onPress={() => setActiveStatus(tab.key)}
+              style={styles.clearFilterButton}
+              onPress={() => {
+                setActiveStatus('all');
+                setActiveSubject('all');
+              }}
+              activeOpacity={0.75}
             >
-              <Text style={[styles.tabText, activeStatus === tab.key && styles.tabTextActive]}>
-                {tab.label}
-              </Text>
-              <View style={[styles.tabCount, activeStatus === tab.key && styles.tabCountActive]}>
-                <Text style={[styles.tabCountText, activeStatus === tab.key && { color: COLORS.primary }]}>
-                  {counts[tab.key]}
-                </Text>
-              </View>
+              <Text style={styles.clearFilterText}>Xóa lọc</Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Tooltip Step 2 */}
-      {tutorialActiveTab === 'Tasks' && tutorialActiveStep === 2 && (
-        <View style={{ zIndex: 1001, marginHorizontal: SPACING.md, marginTop: 8 }}>
-          <TutorialTooltip
-            step={2}
-            totalSteps={2}
-            title="Bộ lọc công việc"
-            description="Lọc theo trạng thái hoặc theo môn học để tìm đúng việc cần xử lý."
-            onNext={() => useFocusStore.getState().nextTutorialStep()}
-            onPrev={() => useFocusStore.getState().prevTutorialStep()}
-            onSkip={() => useFocusStore.getState().skipTutorial()}
-            arrowPosition="top"
-          />
+          )}
         </View>
-      )}
 
-      {/* Subject filter */}
-      <View style={styles.subjectContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subjectRow} contentContainerStyle={styles.subjectContent}>
-          <TouchableOpacity
-            style={[styles.subjectChip, activeSubject === 'all' && styles.subjectChipActive]}
-            onPress={() => setActiveSubject('all')}
-          >
-            <Text style={[styles.subjectChipText, activeSubject === 'all' && styles.subjectChipTextActive]}>Tất cả môn</Text>
-          </TouchableOpacity>
-          {subjects.map((s) => (
+        <View style={styles.filterGroup}>
+          <Text style={styles.filterLabel}>Trạng thái</Text>
+          <View style={styles.statusGrid}>
+            {STATUS_TABS.map((tab) => {
+              const isActive = activeStatus === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.statusButton, isActive && styles.statusButtonActive]}
+                  onPress={() => setActiveStatus(tab.key)}
+                  activeOpacity={0.82}
+                >
+                  <Text style={[styles.statusText, isActive && styles.statusTextActive]} numberOfLines={1}>
+                    {tab.label}
+                  </Text>
+                  <Text style={[styles.statusCount, isActive && styles.statusCountActive]}>
+                    {counts[tab.key]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.filterGroup}>
+          <View style={styles.subjectHeaderRow}>
+            <Text style={styles.filterLabel}>Môn học</Text>
             <TouchableOpacity
-              key={s.id}
-              style={[styles.subjectChip, activeSubject === s.id && { backgroundColor: s.color, borderColor: s.color }]}
-              onPress={() => setActiveSubject(s.id)}
+              style={styles.manageSubjectButton}
+              onPress={() => setSubjectsVisible(true)}
+              activeOpacity={0.75}
             >
-              <View style={[styles.subjectDot, { backgroundColor: activeSubject === s.id ? '#fff' : s.color }]} />
-              <Text style={[styles.subjectChipText, activeSubject === s.id && { color: '#fff' }]}>{s.shortName}</Text>
+              <Ionicons name="folder-open-outline" size={14} color={COLORS.primary} />
+              <Text style={styles.manageSubjectText}>Quản lý môn</Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectContent}>
+            <TouchableOpacity
+              style={[styles.subjectChip, activeSubject === 'all' && styles.subjectChipActive]}
+              onPress={() => setActiveSubject('all')}
+              activeOpacity={0.82}
+            >
+              <Text style={[styles.subjectChipText, activeSubject === 'all' && styles.subjectChipTextActive]}>Tất cả</Text>
+            </TouchableOpacity>
+            {subjects.map((subject) => {
+              const isActive = activeSubject === subject.id;
+              return (
+                <TouchableOpacity
+                  key={subject.id}
+                  style={[styles.subjectChip, isActive && { backgroundColor: subject.color, borderColor: subject.color }]}
+                  onPress={() => setActiveSubject(subject.id)}
+                  activeOpacity={0.82}
+                >
+                  <View style={[styles.subjectDot, { backgroundColor: isActive ? '#fff' : subject.color }]} />
+                  <Text style={[styles.subjectChipText, isActive && { color: '#fff' }]}>{subject.shortName}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
       </View>
 
-      {/* Task list */}
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
         {filtered.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name={tasks.length === 0 ? 'clipboard-outline' : 'search-outline'} size={48} color={COLORS.border} />
             <Text style={styles.emptyText}>
-              {tasks.length === 0 ? 'Chưa có công việc nào' : 'Không có công việc phù hợp'}
+              {tasks.length === 0 ? 'Chưa có công việc nào' : 'Không có việc phù hợp'}
             </Text>
             <Text style={styles.emptySubtext}>
-              {tasks.length === 0 ? 'Tạo công việc đầu tiên để bắt đầu học có mục tiêu.' : 'Thử đổi bộ lọc hoặc tạo thêm việc mới.'}
+              {tasks.length === 0 ? 'Tạo việc đầu tiên để bắt đầu học có kế hoạch.' : 'Thử đổi bộ lọc hoặc tạo việc mới.'}
             </Text>
             <TouchableOpacity style={styles.emptyAction} onPress={handleOpenAdd} activeOpacity={0.8}>
               <Ionicons name="add" size={16} color="#fff" />
@@ -168,16 +176,12 @@ export default function TasksScreen() {
         ) : (
           filtered.map((task, index) => (
             <FadeInView key={task.id} delay={index * 60}>
-              <TaskCard 
-                task={task} 
-                onToggle={toggleTaskDone} 
-              />
+              <TaskCard task={task} onToggle={toggleTaskDone} />
             </FadeInView>
           ))
         )}
       </ScrollView>
 
-      {/* Floating Action Button Container */}
       <View style={[
         styles.fabContainer,
         (tutorialActiveTab === 'Tasks' && tutorialActiveStep === 1) && { zIndex: 1001 }
@@ -186,57 +190,55 @@ export default function TasksScreen() {
           <View style={styles.fabTooltip}>
             <TutorialTooltip
               step={1}
-              totalSteps={2}
-              title="Thêm công việc mới"
-              description="Bấm dấu cộng để tạo việc cần làm, đặt độ ưu tiên và ước lượng số phiên tập trung."
-              onNext={() => useFocusStore.getState().nextTutorialStep()}
+              totalSteps={1}
+              title="Lên kế hoạch"
+              description="Mỗi lịch học sẽ đi kèm các công việc (to-do) tương ứng. Hãy bấm dấu + này để tạo công việc đầu tiên nhé."
+              hideNext={true}
               onSkip={() => useFocusStore.getState().skipTutorial()}
               arrowPosition="bottom"
             />
           </View>
         )}
-        <TouchableScale 
+        <TouchableScale
           style={[
             styles.fab,
             (tutorialActiveTab === 'Tasks' && tutorialActiveStep === 1) && { borderColor: '#fff', borderWidth: 2, ...SHADOW.lg }
-          ]} 
-          onPress={handleOpenAdd} 
+          ]}
+          onPress={handleOpenAdd}
           activeScale={0.9}
         >
           <Ionicons name="add" size={28} color="#fff" />
         </TouchableScale>
       </View>
 
-      {/* Task Form Modal */}
       <TaskFormModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         taskToEdit={selectedTask}
       />
 
-      {/* Combined Subject Modal */}
       <ModalContainer
         visible={subjectsVisible}
         onClose={() => {
           setSubjectsVisible(false);
           setSubjectModalMode('manager');
         }}
-        title={subjectModalMode === 'manager' ? "Quản lý chủ đề học tập" : (selectedSubject ? "Sửa chủ đề" : "Thêm chủ đề mới")}
+        title={subjectModalMode === 'manager' ? 'Quản lý môn học' : (selectedSubject ? 'Sửa môn học' : 'Thêm môn học')}
       >
         {subjectModalMode === 'manager' ? (
           <View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 350, paddingBottom: 10 }}>
-              {subjects.map((sub) => (
+              {subjects.map((subject) => (
                 <TouchableOpacity
-                  key={sub.id}
+                  key={subject.id}
                   onPress={() => {
-                    setSelectedSubject(sub);
+                    setSelectedSubject(subject);
                     setSubjectModalMode('form');
                   }}
                   activeOpacity={0.7}
                   style={{ marginBottom: 2 }}
                 >
-                  <SubjectCard subject={sub} />
+                  <SubjectCard subject={subject} />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -249,7 +251,7 @@ export default function TasksScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="add" size={20} color="#fff" />
-              <Text style={styles.btnAddSubjectText}>Thêm chủ đề mới</Text>
+              <Text style={styles.btnAddSubjectText}>Thêm môn học</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -260,7 +262,7 @@ export default function TasksScreen() {
           />
         )}
       </ModalContainer>
-      {/* Tutorial Backdrop Overlay */}
+
       {tutorialActiveTab === 'Tasks' && tutorialActiveStep !== null && (
         <View pointerEvents="none" style={styles.tutorialBackdrop} />
       )}
@@ -270,62 +272,173 @@ export default function TasksScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingTop: 16, paddingBottom: 8 },
-  title: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
-  btnManageSubjects: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primary + '15',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: RADIUS.md,
-    marginTop: 2,
+    justifyContent: 'space-between',
+    gap: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: 16,
+    paddingBottom: SPACING.md,
   },
-  manageSubjectsText: {
-    fontSize: FONT_SIZE.xs,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHT.semibold,
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
   },
-  btnAddSubject: {
+  title: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+  subtitle: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+    marginTop: 3,
+  },
+  headerAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: COLORS.primary,
-    paddingVertical: 12,
     borderRadius: RADIUS.md,
-    marginTop: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    ...SHADOW.sm,
   },
-  btnAddSubjectText: {
+  headerAddText: {
     color: '#fff',
+    fontSize: FONT_SIZE.sm,
     fontWeight: FONT_WEIGHT.bold,
-    fontSize: FONT_SIZE.md,
   },
-  countBadge: { backgroundColor: COLORS.primaryLight + '20', borderRadius: RADIUS.full, paddingHorizontal: 10, paddingVertical: 4 },
-  countText: { fontSize: FONT_SIZE.sm, color: COLORS.primary, fontWeight: FONT_WEIGHT.semibold },
-  tabContainer: { height: 52 },
-  tabRow: { flex: 1 },
-  tabContent: { paddingHorizontal: SPACING.md, gap: 8, alignItems: 'center' },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border },
-  tabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  tabText: { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.medium, color: COLORS.textSecondary },
-  tabTextActive: { color: '#fff' },
-  tabCount: { backgroundColor: COLORS.borderLight, borderRadius: RADIUS.full, paddingHorizontal: 6, paddingVertical: 1 },
-  tabCountActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
-  tabCountText: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, fontWeight: FONT_WEIGHT.semibold },
-  subjectContainer: { height: 44, marginTop: 8 },
-  subjectRow: { flex: 1 },
-  subjectContent: { paddingHorizontal: SPACING.md, gap: 8, alignItems: 'center' },
-  subjectChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border },
+  filterPanel: {
+    marginHorizontal: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    gap: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOW.sm,
+  },
+  filterPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  filterTitle: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textPrimary,
+  },
+  filterSubtitle: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  clearFilterButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.borderLight,
+  },
+  clearFilterText: {
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textSecondary,
+  },
+  filterGroup: {
+    gap: SPACING.sm,
+  },
+  tutorialLift: {
+    zIndex: 1001,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    ...SHADOW.lg,
+  },
+  tutorialTooltipBlock: {
+    zIndex: 1001,
+  },
+  filterLabel: {
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statusGrid: {
+    flexDirection: 'row',
+    gap: 7,
+  },
+  statusButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  statusButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  statusText: {
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.textSecondary,
+  },
+  statusTextActive: {
+    color: '#fff',
+  },
+  statusCount: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textMuted,
+    marginTop: 2,
+    fontWeight: FONT_WEIGHT.semibold,
+  },
+  statusCountActive: {
+    color: 'rgba(255,255,255,0.78)',
+  },
+  subjectHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  manageSubjectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary + '12',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  manageSubjectText: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  subjectContent: { gap: 8, alignItems: 'center' },
+  subjectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.background,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
   subjectChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  subjectChipText: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.medium },
+  subjectChipText: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.semibold },
   subjectChipTextActive: { color: '#fff' },
   subjectDot: { width: 6, height: 6, borderRadius: 3 },
-  list: { flex: 1, marginTop: 8 },
-  listContent: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, paddingBottom: 100 },
-  empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyText: { fontSize: FONT_SIZE.md, color: COLORS.textMuted },
+  list: { flex: 1, marginTop: SPACING.md },
+  listContent: { paddingHorizontal: SPACING.md, paddingBottom: 100 },
+  empty: { alignItems: 'center', paddingTop: 56, gap: 12 },
+  emptyText: { fontSize: FONT_SIZE.md, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.semibold },
   emptySubtext: {
     fontSize: FONT_SIZE.sm,
     color: COLORS.textMuted,
@@ -347,6 +460,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FONT_SIZE.sm,
     fontWeight: FONT_WEIGHT.bold,
+  },
+  btnAddSubject: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    marginTop: 12,
+  },
+  btnAddSubjectText: {
+    color: '#fff',
+    fontWeight: FONT_WEIGHT.bold,
+    fontSize: FONT_SIZE.md,
   },
   fab: {
     width: 56,

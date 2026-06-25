@@ -13,7 +13,7 @@ import { TutorialTooltip } from '../src/components/ui/TutorialTooltip';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, RADIUS, SPACING, SHADOW } from '../src/utils/theme';
 import { getTodayDayOfWeek, getDayFullName, todayString } from '../src/utils/dateUtils';
 
-export default function TodayScreen() {
+export default function TodayScreen({ navigation }: any) {
   const { tasks, toggleTaskDone } = useTaskStore();
   const { totalPoints, tutorialActiveTab, tutorialActiveStep } = useFocusStore();
   const { slots } = useScheduleStore();
@@ -86,8 +86,8 @@ export default function TodayScreen() {
               <TutorialTooltip
                 step={1}
                 totalSteps={2}
-                title="Điểm thưởng & cấp bậc"
-                description="Điểm tích lũy nằm ở đây. Hoàn thành phiên tập trung sẽ cộng điểm; dừng giữa chừng có thể bị trừ điểm."
+                title="Điểm thưởng"
+                description="Hoàn thành phiên học để nhận điểm."
                 onNext={() => useFocusStore.getState().nextTutorialStep()}
                 onSkip={() => useFocusStore.getState().skipTutorial()}
                 arrowPosition="top"
@@ -128,8 +128,8 @@ export default function TodayScreen() {
                 <TutorialTooltip
                   step={2}
                   totalSteps={2}
-                  title="Việc cần làm & lịch hôm nay"
-                  description="Khu vực này gom lịch học và các việc quan trọng trong ngày để bạn biết nên bắt đầu từ đâu."
+                  title="Hôm nay"
+                  description="Xem lịch và việc cần làm trong ngày."
                   onNext={() => useFocusStore.getState().nextTutorialStep()}
                   onPrev={() => useFocusStore.getState().prevTutorialStep()}
                   onSkip={() => useFocusStore.getState().skipTutorial()}
@@ -140,7 +140,7 @@ export default function TodayScreen() {
             {/* Today's Schedule */}
             {todaySlots.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📅 Lịch học hôm nay</Text>
+                <Text style={styles.sectionTitleStandalone}>📅 Lịch học hôm nay</Text>
                 {todaySlots.map((slot, index) => (
                   <FadeInView key={slot.id} delay={index * 60}>
                     <ScheduleCard slot={slot} />
@@ -158,9 +158,22 @@ export default function TodayScreen() {
 
             {/* Urgent Tasks */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🔥 Cần làm hôm nay</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Cần làm hôm nay</Text>
+                <TouchableOpacity
+                  style={styles.sectionAddButton}
+                  onPress={() => navigation?.navigate('Tasks')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="add" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
               {urgentTasks.length === 0 ? (
-                <View style={styles.emptyTask}>
+                <TouchableOpacity
+                  style={styles.emptyTask}
+                  onPress={() => tasks.length === 0 && navigation?.navigate('Tasks')}
+                  activeOpacity={tasks.length === 0 ? 0.8 : 1}
+                >
                   <Ionicons
                     name={tasks.length === 0 ? 'add-circle-outline' : 'checkmark-circle-outline'}
                     size={28}
@@ -168,10 +181,10 @@ export default function TodayScreen() {
                   />
                   <Text style={styles.emptyText}>
                     {tasks.length === 0
-                      ? 'Chưa có công việc nào. Tạo việc mới ở tab Việc.'
+                      ? 'Chưa có công việc nào. Bấm + để tạo ở tab Việc.'
                       : 'Tất cả công việc hôm nay đã xong!'}
                   </Text>
-                </View>
+                </TouchableOpacity>
               ) : (
                 urgentTasks.map((task, index) => (
                   <FadeInView key={task.id} delay={index * 60 + 100}>
@@ -223,7 +236,23 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: FONT_SIZE.xs, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   body: { padding: SPACING.md, paddingTop: SPACING.lg },
   section: { marginBottom: SPACING.lg },
-  sectionTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  sectionTitle: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+  sectionTitleStandalone: { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  sectionAddButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOW.sm,
+  },
   emptySchedule: { alignItems: 'center', paddingVertical: 24, gap: 8 },
   emptyTask: { alignItems: 'center', paddingVertical: 16, gap: 6 },
   emptyText: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted },

@@ -185,10 +185,11 @@ export default function AdminScreen() {
           text: 'Đồng ý',
           onPress: async () => {
             try {
-              const { error } = await supabase
-                .from('users')
-                .update({ role: newRole })
-                .eq('id', userId);
+              // Gọi RPC thay vì .update() trực tiếp để bypass RLS
+              const { error } = await supabase.rpc('update_user_role', {
+                target_user_id: userId,
+                new_role: newRole,
+              });
               
               if (error) {
                 Alert.alert('Lỗi', error.message);

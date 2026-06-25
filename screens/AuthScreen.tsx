@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../src/lib/supabase';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, RADIUS, SPACING, SHADOW } from '../src/utils/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { TomatoLogo } from '../src/components/brand/TomatoLogo';
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -143,235 +144,242 @@ export default function AuthScreen() {
     }
   }
 
+  const formContent = (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Logo & Header */}
+      <View style={styles.headerContainer}>
+        <TomatoLogo size={90} />
+        <Text style={styles.appTitle}>Tomato Plan</Text>
+        <Text style={styles.appSubtitle}>
+          {isLogin ? 'Chào mừng bạn quay trở lại!' : 'Đăng ký tài khoản để bắt đầu rèn luyện'}
+        </Text>
+      </View>
+
+      {/* Auth Form Card */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{isLogin ? 'Đăng Nhập' : 'Đăng Ký'}</Text>
+
+        {feedback && (
+          <View style={styles.feedbackBox}>
+            <Text style={styles.feedbackText}>{feedback}</Text>
+          </View>
+        )}
+
+        {/* Email Input */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>
+            Địa chỉ Email <Text style={styles.required}>*</Text>
+          </Text>
+          <View
+            style={[
+              styles.inputWrapper,
+              focusedInput === 'email' && styles.inputWrapperFocused,
+              emailError ? styles.inputWrapperError : null,
+            ]}
+          >
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color={focusedInput === 'email' ? COLORS.primary : COLORS.textMuted}
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (emailError) setEmailError(null);
+              }}
+              value={email}
+              placeholder="vi_du@example.com"
+              placeholderTextColor={COLORS.textMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              onFocus={() => setFocusedInput('email')}
+              onBlur={() => setFocusedInput(null)}
+            />
+          </View>
+          {emailError && (
+            <View style={styles.errorRow}>
+              <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
+              <Text style={styles.errorText}>{emailError}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Password Input */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>
+            Mật khẩu <Text style={styles.required}>*</Text>
+          </Text>
+          <View
+            style={[
+              styles.inputWrapper,
+              focusedInput === 'password' && styles.inputWrapperFocused,
+              passwordError ? styles.inputWrapperError : null,
+            ]}
+          >
+            <Ionicons
+              name="lock-closed-outline"
+              size={20}
+              color={focusedInput === 'password' ? COLORS.primary : COLORS.textMuted}
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (passwordError) setPasswordError(null);
+              }}
+              value={password}
+              secureTextEntry={!showPassword}
+              placeholder="Mật khẩu"
+              placeholderTextColor={COLORS.textMuted}
+              autoCapitalize="none"
+              onFocus={() => setFocusedInput('password')}
+              onBlur={() => setFocusedInput(null)}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeIcon}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={20}
+                color={COLORS.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+          {passwordError ? (
+            <View style={styles.errorRow}>
+              <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
+              <Text style={styles.errorText}>{passwordError}</Text>
+            </View>
+          ) : (
+            !isLogin && (
+              <Text style={styles.inputHint}>Mật khẩu phải chứa ít nhất 6 ký tự.</Text>
+            )
+          )}
+        </View>
+
+        {/* Confirm Password Input */}
+        {!isLogin && (
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>
+              Xác nhận mật khẩu <Text style={styles.required}>*</Text>
+            </Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                focusedInput === 'confirmPassword' && styles.inputWrapperFocused,
+                confirmPasswordError ? styles.inputWrapperError : null,
+              ]}
+            >
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={focusedInput === 'confirmPassword' ? COLORS.primary : COLORS.textMuted}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  if (confirmPasswordError) setConfirmPasswordError(null);
+                }}
+                value={confirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                placeholder="Xác nhận mật khẩu"
+                placeholderTextColor={COLORS.textMuted}
+                autoCapitalize="none"
+                onFocus={() => setFocusedInput('confirmPassword')}
+                onBlur={() => setFocusedInput(null)}
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={styles.eyeIcon}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={COLORS.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+            {confirmPasswordError && (
+              <View style={styles.errorRow}>
+                <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
+                <Text style={styles.errorText}>{confirmPasswordError}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Action Button */}
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={isLogin ? signInWithEmail : signUpWithEmail}
+          disabled={loading}
+          activeOpacity={0.8}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>{isLogin ? 'Đăng Nhập' : 'Đăng Ký Ngay'}</Text>
+              <Ionicons
+                name={isLogin ? 'log-in-outline' : 'person-add-outline'}
+                size={20}
+                color="#fff"
+                style={{ marginLeft: 8 }}
+              />
+            </>
+          )}
+        </TouchableOpacity>
+
+        {/* Mode Switcher */}
+        <TouchableOpacity
+          style={styles.switchButton}
+          onPress={() => {
+            setIsLogin(!isLogin);
+            setEmailError(null);
+            setPasswordError(null);
+            setConfirmPasswordError(null);
+            setPassword('');
+            setConfirmPassword('');
+            setFeedback(null);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.switchButtonText}>
+            {isLogin ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+
   return (
     <LinearGradient
       colors={[COLORS.primaryDark, COLORS.primary, '#8B85FF']}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardAvoid}
-        >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+        {Platform.OS === 'ios' ? (
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={styles.keyboardAvoid}
           >
-            {/* Logo & Header */}
-            <View style={styles.headerContainer}>
-              <View style={styles.logoCircle}>
-                <Ionicons name="timer" size={48} color={COLORS.primary} />
-              </View>
-              <Text style={styles.appTitle}>Kỷ Luật Học Tập</Text>
-              <Text style={styles.appSubtitle}>
-                {isLogin ? 'Chào mừng bạn quay trở lại!' : 'Đăng ký tài khoản để bắt đầu rèn luyện'}
-              </Text>
-            </View>
-
-            {/* Auth Form Card */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>{isLogin ? 'Đăng Nhập' : 'Đăng Ký'}</Text>
-
-              {feedback && (
-                <View style={styles.feedbackBox}>
-                  <Text style={styles.feedbackText}>{feedback}</Text>
-                </View>
-              )}
-
-              {/* Email Input */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>
-                  Địa chỉ Email <Text style={styles.required}>*</Text>
-                </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    focusedInput === 'email' && styles.inputWrapperFocused,
-                    emailError ? styles.inputWrapperError : null,
-                  ]}
-                >
-                  <Ionicons
-                    name="mail-outline"
-                    size={20}
-                    color={focusedInput === 'email' ? COLORS.primary : COLORS.textMuted}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    onChangeText={(text) => {
-                      setEmail(text);
-                      if (emailError) setEmailError(null);
-                    }}
-                    value={email}
-                    placeholder="vi_du@example.com"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    onFocus={() => setFocusedInput('email')}
-                    onBlur={() => setFocusedInput(null)}
-                  />
-                </View>
-                {emailError && (
-                  <View style={styles.errorRow}>
-                    <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
-                    <Text style={styles.errorText}>{emailError}</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Password Input */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>
-                  Mật khẩu <Text style={styles.required}>*</Text>
-                </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    focusedInput === 'password' && styles.inputWrapperFocused,
-                    passwordError ? styles.inputWrapperError : null,
-                  ]}
-                >
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={20}
-                    color={focusedInput === 'password' ? COLORS.primary : COLORS.textMuted}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    onChangeText={(text) => {
-                      setPassword(text);
-                      if (passwordError) setPasswordError(null);
-                    }}
-                    value={password}
-                    secureTextEntry={!showPassword}
-                    placeholder="Mật khẩu"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                    onFocus={() => setFocusedInput('password')}
-                    onBlur={() => setFocusedInput(null)}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeIcon}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                      size={20}
-                      color={COLORS.textSecondary}
-                    />
-                  </TouchableOpacity>
-                </View>
-                {passwordError ? (
-                  <View style={styles.errorRow}>
-                    <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
-                    <Text style={styles.errorText}>{passwordError}</Text>
-                  </View>
-                ) : (
-                  !isLogin && (
-                    <Text style={styles.inputHint}>Mật khẩu phải chứa ít nhất 6 ký tự.</Text>
-                  )
-                )}
-              </View>
-
-              {/* Confirm Password Input */}
-              {!isLogin && (
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>
-                    Xác nhận mật khẩu <Text style={styles.required}>*</Text>
-                  </Text>
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      focusedInput === 'confirmPassword' && styles.inputWrapperFocused,
-                      confirmPasswordError ? styles.inputWrapperError : null,
-                    ]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color={focusedInput === 'confirmPassword' ? COLORS.primary : COLORS.textMuted}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      onChangeText={(text) => {
-                        setConfirmPassword(text);
-                        if (confirmPasswordError) setConfirmPasswordError(null);
-                      }}
-                      value={confirmPassword}
-                      secureTextEntry={!showConfirmPassword}
-                      placeholder="Xác nhận mật khẩu"
-                      placeholderTextColor={COLORS.textMuted}
-                      autoCapitalize="none"
-                      onFocus={() => setFocusedInput('confirmPassword')}
-                      onBlur={() => setFocusedInput(null)}
-                    />
-                    <TouchableOpacity
-                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                      style={styles.eyeIcon}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={20}
-                        color={COLORS.textSecondary}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  {confirmPasswordError && (
-                    <View style={styles.errorRow}>
-                      <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} />
-                      <Text style={styles.errorText}>{confirmPasswordError}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Action Button */}
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={isLogin ? signInWithEmail : signUpWithEmail}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Text style={styles.buttonText}>{isLogin ? 'Đăng Nhập' : 'Đăng Ký Ngay'}</Text>
-                    <Ionicons
-                      name={isLogin ? 'log-in-outline' : 'person-add-outline'}
-                      size={20}
-                      color="#fff"
-                      style={{ marginLeft: 8 }}
-                    />
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Mode Switcher */}
-              <TouchableOpacity
-                style={styles.switchButton}
-                onPress={() => {
-                  setIsLogin(!isLogin);
-                  setEmailError(null);
-                  setPasswordError(null);
-                  setConfirmPasswordError(null);
-                  setPassword('');
-                  setConfirmPassword('');
-                  setFeedback(null);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.switchButtonText}>
-                  {isLogin ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+            {formContent}
+          </KeyboardAvoidingView>
+        ) : (
+          formContent
+        )}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -388,10 +396,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
     padding: SPACING.lg,
-    paddingTop: Platform.OS === 'ios' ? 20 : 40,
+    paddingTop: Platform.OS === 'ios' ? 40 : 60,
     paddingBottom: 40,
   },
   headerContainer: {
@@ -477,7 +483,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 2,
   },
   inputWrapperError: {
     borderColor: COLORS.danger,

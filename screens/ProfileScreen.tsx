@@ -17,7 +17,7 @@ import { ModalContainer } from '../src/components/ui/ModalContainer';
 import { TutorialTooltip } from '../src/components/ui/TutorialTooltip';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, RADIUS, SPACING, SHADOW } from '../src/utils/theme';
 import { TouchableScale } from '../src/components/ui/TouchableScale';
-import { dateToString, getWeekDates, getDayName } from '../src/utils/dateUtils';
+import { dateToString } from '../src/utils/dateUtils';
 import { ProgressBar } from '../src/components/ui/ProgressBar';
 import { MUSIC_TRACKS, MusicTrack } from '../src/hooks/useAudioPlayer';
 import { supabase } from '../src/lib/supabase';
@@ -58,7 +58,6 @@ export default function ProfileScreen() {
   const { tasks } = useTaskStore();
   const { subjects } = useSubjectStore();
 
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'stats'>('profile');
   const [username, setUsername] = useState('Người học chăm chỉ');
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState('');
@@ -66,14 +65,7 @@ export default function ProfileScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
 
-  // Force 'profile' subtab when Profile tutorial triggers
-  useEffect(() => {
-    if (tutorialActiveTab === 'Profile') {
-      setActiveSubTab('profile');
-    }
-  }, [tutorialActiveTab]);
-
-  // Auto scroll
+  // Auto scroll khi tutorial chạy
   useEffect(() => {
     if (tutorialActiveTab === 'Profile' && tutorialActiveStep !== null) {
       setTimeout(() => {
@@ -196,7 +188,7 @@ export default function ProfileScreen() {
     () => sessions.filter((s) => s.completed && s.sessionType === 'pomodoro').length,
     [sessions]
   );
-  
+
   const streakDays = useMemo(() => {
     let streak = 0;
     for (let i = 0; i < 30; i++) {
@@ -210,37 +202,7 @@ export default function ProfileScreen() {
     return streak;
   }, [sessions]);
 
-  // ─── Stats Tab Calculations ──────────────────────────────────────────────────
-  const weekDates = useMemo(() => getWeekDates(), []);
-
-  const dailyMinutes = useMemo(() =>
-    weekDates.map((date) => {
-      const ds = dateToString(date);
-      return sessions
-        .filter((s) => s.date === ds && s.completed)
-        .reduce((sum, s) => sum + s.durationMinutes, 0);
-    }), [sessions, weekDates]);
-
-  const maxMinutes = Math.max(...dailyMinutes, 1);
-  const totalWeekMinutes = dailyMinutes.reduce((a, b) => a + b, 0);
-
-  const subjectMinutes = useMemo(() =>
-    subjects.map((sub) => ({
-      subject: sub,
-      minutes: sessions.filter((s) => s.subjectId === sub.id && s.completed).reduce((sum, s) => sum + s.durationMinutes, 0),
-    })).filter((x) => x.minutes > 0).sort((a, b) => b.minutes - a.minutes),
-    [sessions, subjects]
-  );
-  const totalSubjectMin = subjectMinutes.reduce((a, b) => a + b.minutes, 0) || 1;
-
-  const totalFocusMinutes = useMemo(() =>
-    sessions
-      .filter((s) => s.completed && s.sessionType === 'pomodoro')
-      .reduce((sum, s) => sum + s.durationMinutes, 0),
-    [sessions]
-  );
-
-  // ─── Event Handlers ──────────────────────────────────────────────────────────
+  // ─── Event Handlers ───────────────────────────────────────────────────────────
   const handleStartEditName = () => {
     setTempName(username);
     setIsEditingName(true);
@@ -309,32 +271,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Tab Selector */}
-        <View style={styles.segmentContainer}>
-          <TouchableOpacity
-            style={[styles.segmentBtn, activeSubTab === 'profile' && styles.segmentBtnActive]}
-            onPress={() => setActiveSubTab('profile')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="person-outline" size={16} color={activeSubTab === 'profile' ? '#fff' : COLORS.textSecondary} />
-            <Text style={[styles.segmentText, activeSubTab === 'profile' && styles.segmentTextActive]}>
-              Hồ sơ
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.segmentBtn, activeSubTab === 'stats' && styles.segmentBtnActive]}
-            onPress={() => setActiveSubTab('stats')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="bar-chart-outline" size={16} color={activeSubTab === 'stats' ? '#fff' : COLORS.textSecondary} />
-            <Text style={[styles.segmentText, activeSubTab === 'stats' && styles.segmentTextActive]}>
-              Thống kê học tập
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {activeSubTab === 'profile' ? (
-          <View style={(tutorialActiveTab === 'Profile' && tutorialActiveStep !== null) ? { zIndex: 1001 } : undefined}>
+        <View style={(tutorialActiveTab === 'Profile' && tutorialActiveStep !== null) ? { zIndex: 1001 } : undefined}>
             {/* User Card */}
             <View style={[
               styles.profileCard,
@@ -378,8 +315,8 @@ export default function ProfileScreen() {
                 <TutorialTooltip
                   step={1}
                   totalSteps={2}
-                  title="Hồ sơ cá nhân 🏅"
-                  description="Theo dõi sự tiến bộ, xem cấp bậc hiện tại và lịch sử học tập / điểm số của bạn."
+                  title="Hồ sơ"
+                  description="Xem tiến độ học tập."
                   onNext={() => useFocusStore.getState().nextTutorialStep()}
                   onSkip={() => useFocusStore.getState().skipTutorial()}
                   arrowPosition="top"
@@ -454,8 +391,8 @@ export default function ProfileScreen() {
                   <TutorialTooltip
                     step={2}
                     totalSteps={2}
-                    title="Cửa hàng nhạc nền 🎵"
-                    description="Late Afternoon Study được mở sẵn. Các bài còn lại cần mở khóa bằng điểm rồi mới chọn được trong phiên tập trung."
+                    title="Nhạc nền"
+                    description="Dùng điểm để mở nhạc mới."
                     onNext={() => useFocusStore.getState().nextTutorialStep()}
                     onPrev={() => useFocusStore.getState().prevTutorialStep()}
                     onSkip={() => useFocusStore.getState().skipTutorial()}
@@ -507,133 +444,6 @@ export default function ProfileScreen() {
               })}
             </View>
           </View>
-        ) : (
-          <View>
-            {/* Weekly chart */}
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>⏱ Giờ học tuần này</Text>
-                <Text style={styles.cardValue}>{Math.round(totalWeekMinutes / 60 * 10) / 10}h</Text>
-              </View>
-              <View style={styles.chart}>
-                {dailyMinutes.map((min, i) => {
-                  const barH = Math.max(4, (min / maxMinutes) * 100);
-                  const date = weekDates[i];
-                  const isToday = dateToString(date) === dateToString(new Date());
-                  return (
-                    <View key={i} style={styles.chartCol}>
-                      {min > 0 && (
-                        <Text style={styles.chartLabel}>{min}p</Text>
-                      )}
-                      <View style={styles.barTrack}>
-                        <View
-                          style={[
-                            styles.bar,
-                            { height: barH, backgroundColor: isToday ? COLORS.primary : COLORS.primaryLight + '60' },
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.dayLabel, isToday && { color: COLORS.primary, fontWeight: FONT_WEIGHT.bold }]}>
-                        {getDayName(date.getDay())}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Pomodoro count */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Phiên học hoàn thành</Text>
-              <Text style={styles.pomodoroTotal}>{totalPomodoros} phiên học = {totalFocusMinutes} phút tập trung</Text>
-            </View>
-
-            {/* Subject breakdown */}
-            {subjectMinutes.length > 0 ? (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>📚 Phân bổ môn học</Text>
-                <View style={styles.subjectList}>
-                  {subjectMinutes.map(({ subject, minutes }) => {
-                    const pct = minutes / totalSubjectMin;
-                    return (
-                      <View key={subject.id} style={styles.subjectRow}>
-                        <View style={[styles.subjectColor, { backgroundColor: subject.color }]} />
-                        <Text style={styles.subjectName} numberOfLines={1}>{subject.shortName}</Text>
-                        <View style={styles.barWrap}>
-                          <View style={[styles.subjectBar, { width: `${pct * 100}%`, backgroundColor: subject.color }]} />
-                        </View>
-                        <Text style={styles.subjectMin}>{minutes}p</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>📚 Phân bổ môn học</Text>
-                <Text style={styles.emptyStatsText}>Chưa có dữ liệu học tập. Bắt đầu phiên học để xem phân tích nhé! ⏱️</Text>
-              </View>
-            )}
-
-            {/* Abandon history */}
-            {abandonLogs.length > 0 && (
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>🟠 Lịch sử bỏ dở</Text>
-                  <Text style={styles.cardValue}>{abandonLogs.length}</Text>
-                </View>
-                <View style={styles.abandonList}>
-                  {abandonLogs.slice(0, 10).map((log) => {
-                    const sub = subjects.find((s) => s.id === log.subjectId);
-                    const pct = Math.round((log.elapsedSeconds / log.totalSeconds) * 100);
-                    return (
-                      <View key={log.id} style={styles.abandonRow}>
-                        {/* Color bar */}
-                        <View style={[styles.abandonAccent, { backgroundColor: sub?.color ?? COLORS.border }]} />
-                        <View style={styles.abandonContent}>
-                          <View style={styles.abandonTop}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Text style={styles.abandonMode}>{MODE_EMOJI[log.mode]} {MODE_LABEL[log.mode]}</Text>
-                              <Text style={styles.penaltyText}>-5đ</Text>
-                            </View>
-                            <Text style={styles.abandonTime}>{formatTime(log.timestamp)}</Text>
-                          </View>
-                          <View style={styles.abandonMid}>
-                            {sub && (
-                              <View style={[styles.subjectBadge, { backgroundColor: sub.color + '20' }]}>
-                                <View style={[styles.badgeDot, { backgroundColor: sub.color }]} />
-                                <Text style={[styles.badgeText, { color: sub.color }]}>{sub.shortName}</Text>
-                              </View>
-                            )}
-                            <Text style={styles.abandonReason}>{REASON_LABEL[log.reason]}</Text>
-                          </View>
-                          {/* Progress bar */}
-                          <View style={styles.progressTrack}>
-                            <View
-                              style={[
-                                styles.progressFill,
-                                {
-                                  width: `${pct}%` as any,
-                                  backgroundColor: sub?.color ?? COLORS.primary,
-                                },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.abandonStat}>
-                            Đã học {formatElapsed(log.elapsedSeconds)} / {formatElapsed(log.totalSeconds)} ({pct}%)
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-                {abandonLogs.length > 10 && (
-                  <Text style={styles.moreText}>+{abandonLogs.length - 10} lần khác…</Text>
-                )}
-              </View>
-            )}
-          </View>
-        )}
       </ScrollView>
 
       {/* Settings Modal */}

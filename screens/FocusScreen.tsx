@@ -99,10 +99,8 @@ export default function FocusScreen() {
     if (tutorialActiveTab !== 'Focus' || tutorialActiveStep === null) return;
     setTimeout(() => {
       if (tutorialActiveStep === 1) {
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
-      } else if (tutorialActiveStep === 2) {
         scrollRef.current?.scrollTo({ y: 330, animated: true });
-      } else if (tutorialActiveStep === 3) {
+      } else if (tutorialActiveStep === 2) {
         scrollRef.current?.scrollTo({ y: 160, animated: true });
       }
     }, 120);
@@ -318,7 +316,7 @@ export default function FocusScreen() {
         </View>
 
         {/* Mode selector */}
-        <View style={(tutorialActiveTab === 'Focus' && tutorialActiveStep === 1) ? styles.tutorialLift : undefined}>
+        <View>
           <View style={styles.modeRow}>
             {(['pomodoro', 'short_break', 'long_break'] as const).map((m) => (
               <TouchableOpacity
@@ -332,19 +330,6 @@ export default function FocusScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          {tutorialActiveTab === 'Focus' && tutorialActiveStep === 1 && (
-            <View style={styles.tutorialBlock}>
-              <TutorialTooltip
-                step={1}
-                totalSteps={3}
-                title="Chọn kiểu phiên học"
-                description="Pomodoro là phiên tập trung chính. Bạn cũng có thể chuyển sang nghỉ ngắn hoặc nghỉ dài khi cần."
-                onNext={() => useFocusStore.getState().nextTutorialStep()}
-                onSkip={() => useFocusStore.getState().skipTutorial()}
-                arrowPosition="top"
-              />
-            </View>
-          )}
         </View>
 
         {/* Timer ring */}
@@ -359,14 +344,14 @@ export default function FocusScreen() {
         </View>
 
         {/* Controls */}
-        <View style={(tutorialActiveTab === 'Focus' && tutorialActiveStep === 3) ? styles.tutorialLift : undefined}>
-          {tutorialActiveTab === 'Focus' && tutorialActiveStep === 3 && (
+        <View style={(tutorialActiveTab === 'Focus' && tutorialActiveStep === 2) ? styles.tutorialLift : undefined}>
+          {tutorialActiveTab === 'Focus' && tutorialActiveStep === 2 && (
             <View style={[styles.tutorialBlock, { marginBottom: SPACING.sm }]}>
               <TutorialTooltip
-                step={3}
-                totalSteps={3}
-                title="Bắt đầu tập trung"
-                description="Bấm nút Play để khóa phiên học. Khi hoàn thành, app sẽ ghi nhận Pomodoro vào môn và task đã chọn."
+                step={2}
+                totalSteps={2}
+                title="Bắt đầu học"
+                description="Bấm nút Play để bắt đầu đếm ngược Pomodoro 25 phút tập trung nhé."
                 onNext={() => useFocusStore.getState().nextTutorialStep()}
                 onPrev={() => useFocusStore.getState().prevTutorialStep()}
                 onSkip={() => useFocusStore.getState().skipTutorial()}
@@ -393,7 +378,7 @@ export default function FocusScreen() {
 
         {/* Subject selector */}
         {mode === 'pomodoro' && (
-          <View style={[styles.section, (tutorialActiveTab === 'Focus' && tutorialActiveStep === 2) && styles.tutorialLift]}>
+          <View style={[styles.section, (tutorialActiveTab === 'Focus' && tutorialActiveStep === 1) && styles.tutorialLift]}>
             <Text style={styles.sectionLabel}>📚 Đang học môn</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectList}>
               {subjects.map((s) => (
@@ -494,15 +479,14 @@ export default function FocusScreen() {
                 </Text>
               </View>
             )}
-            {tutorialActiveTab === 'Focus' && tutorialActiveStep === 2 && (
+            {tutorialActiveTab === 'Focus' && tutorialActiveStep === 1 && (
               <View style={styles.tutorialBlock}>
                 <TutorialTooltip
-                  step={2}
-                  totalSteps={3}
-                  title="Gắn phiên học với task"
-                  description="Chọn môn trước, rồi chọn task đang mở của môn đó. Nếu chưa có task, bạn vẫn có thể ghi nhận phiên theo môn."
+                  step={1}
+                  totalSteps={2}
+                  title="Chọn công việc"
+                  description="Hãy chọn môn học và công việc bạn vừa tạo ở các bước trước để chuẩn bị tập trung nhé."
                   onNext={() => useFocusStore.getState().nextTutorialStep()}
-                  onPrev={() => useFocusStore.getState().prevTutorialStep()}
                   onSkip={() => useFocusStore.getState().skipTutorial()}
                   arrowPosition="top"
                 />
@@ -511,25 +495,7 @@ export default function FocusScreen() {
           </View>
         )}
 
-        {/* Today stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statNum}>{todaySessions.length}</Text>
-            <Text style={styles.statLabel}>Pomodoro</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNum}>
-              {todaySessions.reduce((acc, s) => acc + s.durationMinutes, 0)}
-            </Text>
-            <Text style={styles.statLabel}>Phút tập trung</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNum}>
-              {todaySessions.reduce((acc, s) => acc + Math.round(s.durationMinutes * 0.4), 0)}
-            </Text>
-            <Text style={styles.statLabel}>Điểm thưởng</Text>
-          </View>
-        </View>
+
 
         {/* Recent sessions */}
         {todaySessions.length > 0 && (

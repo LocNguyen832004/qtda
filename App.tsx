@@ -15,11 +15,13 @@ import TasksScreen from './screens/TasksScreen';
 import TimetableScreen from './screens/TimetableScreen';
 import FocusScreen from './screens/FocusScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import StatsScreen from './screens/StatsScreen';
 
 import { COLORS, FONT_SIZE, FONT_WEIGHT } from './src/utils/theme';
 import { PomodoroActiveBanner } from './src/components/focus/PomodoroActiveBanner';
-import { useFocusStore } from './src/store';
+import { useFocusStore, useScheduleStore } from './src/store';
 import { OnboardingStartScreen } from './src/components/onboarding/OnboardingStartScreen';
+import { NewUserGuideScreen } from './src/components/onboarding/NewUserGuideScreen';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import AuthScreen from './screens/AuthScreen';
@@ -41,13 +43,28 @@ const TAB_CONFIG: {
   { name: 'Tasks', label: 'Việc', icon: 'checkbox-outline', iconActive: 'checkbox', component: TasksScreen },
   { name: 'Timetable', label: 'Lịch', icon: 'calendar-outline', iconActive: 'calendar', component: TimetableScreen },
   { name: 'Focus', label: 'Tập trung', icon: 'timer-outline', iconActive: 'timer', component: FocusScreen },
+  { name: 'Stats', label: 'Thống kê', icon: 'bar-chart-outline', iconActive: 'bar-chart', component: StatsScreen },
   { name: 'Profile', label: 'Hồ sơ', icon: 'person-outline', iconActive: 'person', component: ProfileScreen },
 ];
 
 // ─── Inner app wrapper (đọc store hooks bên trong SafeAreaProvider) ─────────
 function AppInner() {
   const insets = useSafeAreaInsets();
-  const { activeSession, logAbandon, setActiveSession, addPoints, hasCompletedOnboarding, completeOnboarding, startTutorial } = useFocusStore();
+  const {
+    activeSession,
+    logAbandon,
+    setActiveSession,
+    addPoints,
+    hasCompletedOnboarding,
+    hasSeenNewUserGuidePrompt,
+    completedTutorialTabs,
+    tutorialActiveTab,
+    completeOnboarding,
+    markNewUserGuideSeen,
+    skipNewUserGuide,
+    startTutorial,
+    syncOnboardingForUser,
+  } = useFocusStore();
   const [currentTab, setCurrentTab] = useState('Today');
   const [session, setSession] = useState<Session | null>(null);
   const [userRole, setUserRole] = useState<'student' | 'admin'>('student');
@@ -58,10 +75,17 @@ function AppInner() {
 
   const handleStartApp = () => {
     completeOnboarding();
-    if (navigationRef.isReady()) {
-      navigationRef.navigate('Focus');
-      startTutorial('Focus');
-    }
+  };
+
+  const handleStartNewUserGuide = () => {
+    markNewUserGuideSeen();
+    setCurrentTab('Timetable');
+    requestAnimationFrame(() => {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('Timetable');
+      }
+      startTutorial('Timetable');
+    });
   };
 
   // Lưu activeSession vào ref để dùng trong AppState listener không bị closure cũ
@@ -219,14 +243,35 @@ function AppInner() {
     if (!activeSession) hasLoggedSwitchRef.current = false;
   }, [activeSession]);
 
+  useEffect(() => {
+    if (userRole === 'admin' || !hasSeenNewUserGuidePrompt || tutorialActiveTab) return;
+
+    if (completedTutorialTabs.includes('Timetable') && !completedTutorialTabs.includes('Tasks')) {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('Tasks');
+      }
+      startTutorial('Tasks');
+    } else if (completedTutorialTabs.includes('Tasks') && !completedTutorialTabs.includes('Focus')) {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('Focus');
+      }
+      startTutorial('Focus');
+    }
+  }, [completedTutorialTabs, hasSeenNewUserGuidePrompt, startTutorial, tutorialActiveTab, userRole]);
+
+
   // App startup effects
   useEffect(() => {
     const fetchSessionAndRole = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
+      syncOnboardingForUser(session?.user.id ?? null);
       if (session) {
         const { data } = await supabase.from('users').select('role').eq('id', session.user.id).single();
         if (data) setUserRole(data.role);
+        // Tải dữ liệu cloud khi đăng nhập
+        useScheduleStore.getState().loadSlotsFromCloud(session.user.id);
+        useFocusStore.getState().loadUserProfileFromCloud(session.user.id);
       }
     };
     
@@ -234,16 +279,20 @@ function AppInner() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
+      syncOnboardingForUser(session?.user.id ?? null);
       if (session) {
         const { data } = await supabase.from('users').select('role').eq('id', session.user.id).single();
         if (data) setUserRole(data.role);
+        // Tải dữ liệu cloud sau khi đăng nhập
+        useScheduleStore.getState().loadSlotsFromCloud(session.user.id);
+        useFocusStore.getState().loadUserProfileFromCloud(session.user.id);
       } else {
         setUserRole('student');
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [syncOnboardingForUser]);
 
   const showBanner = activeSession !== null && currentTab !== 'Focus';
 
@@ -253,6 +302,15 @@ function AppInner() {
 
   if (!session) {
     return <AuthScreen />;
+  }
+
+  if (userRole !== 'admin' && !hasSeenNewUserGuidePrompt) {
+    return (
+      <NewUserGuideScreen
+        onStartGuide={handleStartNewUserGuide}
+        onSkipGuide={skipNewUserGuide}
+      />
+    );
   }
 
   const activeTabs = userRole === 'admin'

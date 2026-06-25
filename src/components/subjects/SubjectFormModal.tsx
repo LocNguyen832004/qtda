@@ -55,7 +55,7 @@ export const SubjectFormContent: React.FC<SubjectFormContentProps> = ({
     } else {
       setName('');
       setShortName('');
-      setTargetHours('5');
+      setTargetHours('');
       setColor('#6C63FF');
     }
   }, [subjectToEdit]);

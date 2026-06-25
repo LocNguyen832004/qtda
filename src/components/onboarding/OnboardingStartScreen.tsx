@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { TomatoLogo } from '../brand/TomatoLogo';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, RADIUS, SPACING, SHADOW } from '../../utils/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -11,8 +12,6 @@ interface OnboardingStartScreenProps {
 }
 
 export const OnboardingStartScreen: React.FC<OnboardingStartScreenProps> = ({ onStart }) => {
-  const [slide, setSlide] = useState<1 | 2>(1);
-
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -23,118 +22,33 @@ export const OnboardingStartScreen: React.FC<OnboardingStartScreenProps> = ({ on
         <View style={[styles.circle, styles.circle1]} />
         <View style={[styles.circle, styles.circle2]} />
 
-        {slide === 1 ? (
-          /* SLIDE 1: GIỚI THIỆU */
-          <View style={styles.content}>
-            {/* Logo / Icon Area */}
-            <View style={styles.logoContainer}>
-              <View style={styles.logoCircle}>
-                <Ionicons name="timer" size={64} color={COLORS.primary} />
-              </View>
-              <View style={styles.sparkleBadge}>
-                <Ionicons name="sparkles" size={16} color="#FFD700" />
-              </View>
+        <View style={styles.content}>
+          {/* Logo / Icon Area */}
+          <View style={styles.logoContainer}>
+            <TomatoLogo size={120} />
+            <View style={styles.sparkleBadge}>
+              <Ionicons name="sparkles" size={16} color="#FFD700" />
             </View>
-
-            {/* Texts */}
-            <View style={styles.textContainer}>
-              <Text style={styles.appTitle}>Kỷ Luật Học Tập</Text>
-              <Text style={styles.tagline}>Lên kế hoạch • Tập trung học • Theo dõi tiến bộ</Text>
-              <Text style={styles.description}>
-                Ứng dụng giúp bạn tạo môn học, chia nhỏ việc cần làm và bắt đầu các phiên tập trung có điểm thưởng rõ ràng.
-              </Text>
-            </View>
-
-            {/* Quick Info Grid */}
-            <View style={styles.infoGrid}>
-              <View style={styles.infoItem}>
-                <Ionicons name="calendar-outline" size={20} color="#fff" />
-                <Text style={styles.infoText}>Lịch học</Text>
-              </View>
-              <View style={styles.infoItem}>
-                <Ionicons name="checkbox-outline" size={20} color="#fff" />
-                <Text style={styles.infoText}>Công việc</Text>
-              </View>
-              <View style={styles.infoItem}>
-                <Ionicons name="star-outline" size={20} color="#fff" />
-                <Text style={styles.infoText}>Điểm thưởng</Text>
-              </View>
-            </View>
-
-            {/* Button CTA */}
-            <TouchableOpacity
-              style={styles.btnStart}
-              onPress={() => setSlide(2)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.btnStartText}>Tiếp tục</Text>
-              <Ionicons name="arrow-forward" size={18} color={COLORS.primary} style={{ marginLeft: 8 }} />
-            </TouchableOpacity>
           </View>
-        ) : (
-          /* SLIDE 2: CÁC BƯỚC KHỞI ĐẦU */
-          <View style={styles.content}>
-            {/* Header row with back arrow */}
-            <View style={styles.slide2Header}>
-              <TouchableOpacity onPress={() => setSlide(1)} style={styles.btnBackArrow} activeOpacity={0.7}>
-                <Ionicons name="chevron-back" size={22} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.slide2HeaderTitle}>Cách bắt đầu học</Text>
-              <View style={{ width: 22 }} />
-            </View>
 
-            {/* Steps Container */}
-            <View style={styles.stepsContainer}>
-              {/* Step 1 */}
-              <View style={styles.stepRow}>
-                <View style={styles.stepNumberBadge}>
-                  <Text style={styles.stepNumberText}>1</Text>
-                </View>
-                <View style={styles.stepTextContent}>
-                  <Text style={styles.stepTextTitle}>Tạo môn học mới</Text>
-                  <Text style={styles.stepTextDesc}>Đặt tên, viết tắt và màu riêng để nhận diện nhanh.</Text>
-                </View>
-              </View>
-
-              {/* Step 2 */}
-              <View style={styles.stepRow}>
-                <View style={styles.stepNumberBadge}>
-                  <Text style={styles.stepNumberText}>2</Text>
-                </View>
-                <View style={styles.stepTextContent}>
-                  <Text style={styles.stepTextTitle}>Tạo công việc cụ thể</Text>
-                  <Text style={styles.stepTextDesc}>Ghi việc cần làm và ước lượng số phiên tập trung.</Text>
-                </View>
-              </View>
-
-              {/* Step 3 */}
-              <View style={styles.stepRow}>
-                <View style={styles.stepNumberBadge}>
-                  <Text style={styles.stepNumberText}>3</Text>
-                </View>
-                <View style={styles.stepTextContent}>
-                  <Text style={styles.stepTextTitle}>Chọn việc rồi bắt đầu</Text>
-                  <Text style={styles.stepTextDesc}>Chọn một công việc, học theo đồng hồ và nhận điểm khi hoàn thành.</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Note text */}
-            <Text style={styles.noteText}>
-              Màn hình Tập trung sẽ hướng dẫn bạn tạo dữ liệu đầu tiên.
+          {/* Texts */}
+          <View style={styles.textContainer}>
+            <Text style={styles.appTitle}>Chào mừng bạn đến với Tomato Plan</Text>
+            <Text style={styles.description}>
+              Hệ thống hỗ trợ bạn lên kế hoạch và quản lý thời gian học tập hiệu quả.
             </Text>
-
-            {/* Button CTA */}
-            <TouchableOpacity
-              style={styles.btnStart}
-              onPress={onStart}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.btnStartText}>Bắt đầu ngay</Text>
-              <Ionicons name="rocket-outline" size={18} color={COLORS.primary} style={{ marginLeft: 8 }} />
-            </TouchableOpacity>
           </View>
-        )}
+
+          {/* Button CTA */}
+          <TouchableOpacity
+            style={styles.btnStart}
+            onPress={onStart}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.btnStartText}>Đăng nhập</Text>
+            <Ionicons name="log-in-outline" size={18} color={COLORS.primary} style={{ marginLeft: 8 }} />
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
     </View>
   );
@@ -260,73 +174,5 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
     color: COLORS.primary,
     fontWeight: FONT_WEIGHT.bold,
-  },
-  /* SLIDE 2 STYLES */
-  slide2Header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginTop: 10,
-  },
-  btnBackArrow: {
-    padding: 4,
-    borderRadius: RADIUS.sm,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  slide2HeaderTitle: {
-    fontSize: 20,
-    fontWeight: FONT_WEIGHT.bold,
-    color: '#fff',
-  },
-  stepsContainer: {
-    width: '100%',
-    gap: 20,
-    marginVertical: 20,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 16,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    gap: 14,
-  },
-  stepNumberBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  stepNumberText: {
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHT.bold,
-    fontSize: FONT_SIZE.md,
-  },
-  stepTextContent: {
-    flex: 1,
-  },
-  stepTextTitle: {
-    fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.bold,
-    color: '#fff',
-  },
-  stepTextDesc: {
-    fontSize: FONT_SIZE.xs + 1,
-    color: 'rgba(255, 255, 255, 0.72)',
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  noteText: {
-    fontSize: FONT_SIZE.xs,
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginBottom: 10,
   },
 });

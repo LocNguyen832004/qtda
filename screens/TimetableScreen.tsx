@@ -75,21 +75,6 @@ export default function TimetableScreen() {
           );
         })}
       </View>
- 
-      {/* Tooltip Step 1 */}
-      {tutorialActiveTab === 'Timetable' && tutorialActiveStep === 1 && (
-        <View style={{ zIndex: 1001, marginHorizontal: SPACING.md, marginTop: 4 }}>
-          <TutorialTooltip
-            step={1}
-            totalSteps={2}
-            title="Thời khóa biểu"
-            description="Chọn từng ngày trong tuần để xem lịch học hoặc khung tự học đã lưu."
-            onNext={() => useFocusStore.getState().nextTutorialStep()}
-            onSkip={() => useFocusStore.getState().skipTutorial()}
-            arrowPosition="top"
-          />
-        </View>
-      )}
 
       {/* Selected day label */}
       <View style={styles.dayHeader}>
@@ -125,21 +110,20 @@ export default function TimetableScreen() {
           ))
         )}
       </ScrollView>
-
+ 
       {/* Floating Action Button Container */}
       <View style={[
         styles.fabContainer,
-        (tutorialActiveTab === 'Timetable' && tutorialActiveStep === 2) && { zIndex: 1001 }
+        (tutorialActiveTab === 'Timetable' && tutorialActiveStep === 1) && { zIndex: 1001 }
       ]}>
-        {tutorialActiveTab === 'Timetable' && tutorialActiveStep === 2 && (
+        {tutorialActiveTab === 'Timetable' && tutorialActiveStep === 1 && (
           <View style={styles.fabTooltip}>
             <TutorialTooltip
-              step={2}
-              totalSteps={2}
-              title="Thêm lịch học mới"
-              description="Bấm dấu cộng để thêm môn học, ngày học và khung giờ."
-              onNext={() => useFocusStore.getState().nextTutorialStep()}
-              onPrev={() => useFocusStore.getState().prevTutorialStep()}
+              step={1}
+              totalSteps={1}
+              title="Tạo lịch học"
+              description="Hãy bấm dấu + này để bắt đầu tạo một lịch học mới nhé."
+              hideNext={true}
               onSkip={() => useFocusStore.getState().skipTutorial()}
               arrowPosition="bottom"
             />
@@ -148,7 +132,7 @@ export default function TimetableScreen() {
         <TouchableScale 
           style={[
             styles.fab,
-            (tutorialActiveTab === 'Timetable' && tutorialActiveStep === 2) && { borderColor: '#fff', borderWidth: 2, ...SHADOW.lg }
+            (tutorialActiveTab === 'Timetable' && tutorialActiveStep === 1) && { borderColor: '#fff', borderWidth: 2, ...SHADOW.lg }
           ]} 
           onPress={handleOpenAdd} 
           activeScale={0.9}
